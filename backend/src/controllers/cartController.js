@@ -1,5 +1,40 @@
 const { CartItem, Product, Coupon } = require('../models');
 
+// Helper to calculate price based on weight
+const calculateWeightPrice = (product, basePrice, weight) => {
+  if (!weight || !product) return basePrice;
+  
+  const unit = (product.unit || '').toLowerCase();
+  if (unit !== 'kg' && unit !== 'gram') {
+    const name = (product.name || '').toLowerCase();
+    const keywords = ['rice', 'flour', 'floar', 'maida', 'sugar', 'daal', 'humad', 'misri', 'badam', 'channa', 'jawain', 'mangraila', 'dal'];
+    const matchesKeyword = keywords.some(keyword => name.includes(keyword));
+    if (!matchesKeyword) return basePrice;
+  }
+
+  const match = weight.match(/^(\d+)\s*(gm|g|kg)$/i);
+  if (!match) return basePrice;
+  
+  const value = parseFloat(match[1]);
+  const matchUnit = match[2].toLowerCase();
+  
+  if (matchUnit === 'gm' || matchUnit === 'g') {
+    if (unit === 'gram') {
+      return basePrice * value;
+    } else {
+      return (basePrice / 1000) * value;
+    }
+  } else if (matchUnit === 'kg') {
+    if (unit === 'gram') {
+      return basePrice * 1000 * value;
+    } else {
+      return basePrice * value;
+    }
+  }
+  return basePrice;
+};
+
+
 // @desc    Get user cart
 // @route   GET /api/cart
 // @access  Private (Customer)
@@ -26,8 +61,9 @@ const getCart = async (req, res) => {
 // @access  Private (Customer)
 const addToCart = async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
+    const { productId, quantity, weight } = req.body;
     const reqQty = quantity ? parseInt(quantity, 10) : 1;
+    const selectedWeight = weight || '1kg';
 
     if (!productId) {
       return res.status(400).json({ success: false, message: 'Product ID is required' });
@@ -39,9 +75,9 @@ const addToCart = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found or inactive' });
     }
 
-    // Check if item already in cart
+    // Check if item already in cart with same weight
     let cartItem = await CartItem.findOne({
-      where: { userId: req.user.id, productId }
+      where: { userId: req.user.id, productId, weight: selectedWeight }
     });
 
     if (cartItem) {
@@ -66,7 +102,8 @@ const addToCart = async (req, res) => {
       cartItem = await CartItem.create({
         userId: req.user.id,
         productId,
-        quantity: reqQty
+        quantity: reqQty,
+        weight: selectedWeight
       });
     }
 
@@ -87,8 +124,9 @@ const addToCart = async (req, res) => {
 // @access  Private (Customer)
 const updateCartQuantity = async (req, res) => {
   try {
-    const { quantity } = req.body;
+    const { quantity, weight } = req.body;
     const productId = req.params.productId;
+    const selectedWeight = weight || '1kg';
 
     if (quantity === undefined || quantity < 1) {
       return res.status(400).json({ success: false, message: 'Quantity must be 1 or more' });
@@ -107,7 +145,7 @@ const updateCartQuantity = async (req, res) => {
     }
 
     const cartItem = await CartItem.findOne({
-      where: { userId: req.user.id, productId }
+      where: { userId: req.user.id, productId, weight: selectedWeight }
     });
 
     if (!cartItem) {
@@ -133,8 +171,9 @@ const updateCartQuantity = async (req, res) => {
 // @access  Private (Customer)
 const removeFromCart = async (req, res) => {
   try {
+    const selectedWeight = req.body?.weight || req.query?.weight || '1kg';
     const deletedCount = await CartItem.destroy({
-      where: { userId: req.user.id, productId: req.params.productId }
+      where: { userId: req.user.id, productId: req.params.productId, weight: selectedWeight }
     });
 
     if (deletedCount === 0) {
@@ -190,7 +229,10 @@ const applyCoupon = async (req, res) => {
       const product = item.product;
       if (product) {
         const originalPrice = parseFloat(product.price);
-        const discountedPrice = product.discountPrice ? parseFloat(product.discountPrice) : originalPrice - (originalPrice * (product.discountPercent || 0)) / 100;
+        const weightPrice = calculateWeightPrice(product, originalPrice, item.weight);
+        const discountedPrice = product.discountPrice 
+          ? calculateWeightPrice(product, parseFloat(product.discountPrice), item.weight) 
+          : weightPrice - (weightPrice * (product.discountPercent || 0)) / 100;
         subtotal += discountedPrice * item.quantity;
       }
     }

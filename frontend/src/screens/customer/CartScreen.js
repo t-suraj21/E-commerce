@@ -38,7 +38,8 @@ export default function CartScreen({ navigation }) {
     cartCouponDiscount,
     cartTax,
     cartDeliveryCharge,
-    cartGrandTotal
+    cartGrandTotal,
+    calculateWeightPrice
   } = useContext(CartContext);
 
   const { t, locale } = useContext(LanguageContext);
@@ -69,7 +70,7 @@ export default function CartScreen({ navigation }) {
   const handleIncrement = async (item) => {
     const newQty = item.quantity + 1;
     if (newQty <= item.product.stockQuantity) {
-      await updateQuantity(item.productId, newQty);
+      await updateQuantity(item.productId, newQty, item.weight);
     } else {
       Alert.alert(t('stockAlert'), `Only ${item.product.stockQuantity} items available in stock`);
     }
@@ -78,9 +79,9 @@ export default function CartScreen({ navigation }) {
   const handleDecrement = async (item) => {
     const newQty = item.quantity - 1;
     if (newQty >= 1) {
-      await updateQuantity(item.productId, newQty);
+      await updateQuantity(item.productId, newQty, item.weight);
     } else {
-      await removeFromCart(item.productId);
+      await removeFromCart(item.productId, item.weight);
     }
   };
 
@@ -92,7 +93,7 @@ export default function CartScreen({ navigation }) {
         : `क्या आप कार्ट से "${item.product.name}" हटाना चाहते हैं?`,
       [
         { text: locale === 'en' ? 'Cancel' : 'रद्द करें', style: 'cancel' },
-        { text: locale === 'en' ? 'Remove' : 'हटाएं', style: 'destructive', onPress: () => removeFromCart(item.productId) }
+        { text: locale === 'en' ? 'Remove' : 'हटाएं', style: 'destructive', onPress: () => removeFromCart(item.productId, item.weight) }
       ]
     );
   };
@@ -116,7 +117,8 @@ export default function CartScreen({ navigation }) {
     const product = item.product;
     if (!product) return null;
 
-    const originalPrice = parseFloat(product.price);
+    const baseOriginalPrice = parseFloat(product.price);
+    const originalPrice = calculateWeightPrice(product, baseOriginalPrice, item.weight);
     const hasDiscount = product.discountPercent > 0;
     const finalPrice = hasDiscount
       ? originalPrice - (originalPrice * product.discountPercent) / 100
@@ -129,7 +131,7 @@ export default function CartScreen({ navigation }) {
         
         <View style={styles.cardDetails}>
           <Text style={[styles.productName, { color: theme.text }]} numberOfLines={2}>{product.name}</Text>
-          <Text style={[styles.productUnit, { color: theme.textSecondary }]}>{product.unit}</Text>
+          <Text style={[styles.productUnit, { color: theme.textSecondary }]}>{item.weight || product.unit}</Text>
           
           <View style={styles.priceRow}>
             <Text style={[styles.finalPrice, { color: theme.text }]}>₹{finalPrice.toFixed(0)}</Text>

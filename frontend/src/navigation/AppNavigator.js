@@ -10,6 +10,7 @@ import { registerForPushNotificationsAsync, setupNotificationListeners } from '.
 import AuthNavigator from './AuthNavigator';
 import CustomerTab from './CustomerTab';
 import AdminTab from './AdminTab';
+import NotificationHistoryScreen from '../screens/shared/NotificationHistoryScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -29,11 +30,14 @@ export default function AppNavigator() {
       <NotificationListener />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          user.role === 'customer' ? (
-            <Stack.Screen name="CustomerHome" component={CustomerTab} />
-          ) : (
-            <Stack.Screen name="AdminHome" component={AdminTab} />
-          )
+          <>
+            {user.role === 'customer' ? (
+              <Stack.Screen name="CustomerHome" component={CustomerTab} />
+            ) : (
+              <Stack.Screen name="AdminHome" component={AdminTab} />
+            )}
+            <Stack.Screen name="NotificationHistory" component={NotificationHistoryScreen} />
+          </>
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}

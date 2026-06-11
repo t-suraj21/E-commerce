@@ -42,7 +42,7 @@ const sendNotificationToUser = async (userId, title, body, data = {}) => {
     }
 
     const pushToken = user.pushToken;
-    if (!pushToken || !pushToken.startsWith('ExponentPushToken')) {
+    if (!pushToken || (!pushToken.startsWith('ExponentPushToken') && !pushToken.startsWith('ExpoPushToken'))) {
       console.log(`[Notification] User #${userId} has no valid Expo Push Token.`);
       return false;
     }
@@ -78,7 +78,7 @@ const sendNotificationToRole = async (role, title, body, data = {}) => {
 
     const messages = [];
     for (let user of users) {
-      if (user.pushToken && user.pushToken.startsWith('ExponentPushToken')) {
+      if (user.pushToken && (user.pushToken.startsWith('ExponentPushToken') || user.pushToken.startsWith('ExpoPushToken'))) {
         messages.push({
           to: user.pushToken,
           sound: 'default',
@@ -122,7 +122,7 @@ const sendBroadcastNotification = async (title, body, data = {}) => {
     const messages = [];
     
     for (let user of users) {
-      if (user.pushToken && user.pushToken.startsWith('ExponentPushToken')) {
+      if (user.pushToken && (user.pushToken.startsWith('ExponentPushToken') || user.pushToken.startsWith('ExpoPushToken'))) {
         messages.push({
           to: user.pushToken,
           sound: 'default',

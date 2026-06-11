@@ -46,7 +46,10 @@ export default function OrderHistoryScreen({ navigation }) {
       case 'pending':
         return { bg: '#FFF3E0', text: '#E65100', icon: 'time-outline' };
       case 'confirmed':
+      case 'accepted':
         return { bg: '#E8F5E9', text: '#2E7D32', icon: 'checkmark-circle-outline' };
+      case 'packed':
+        return { bg: '#F3E5F5', text: '#7B1FA2', icon: 'cube-outline' };
       case 'out_for_delivery':
         return { bg: '#E3F2FD', text: '#0D47A1', icon: 'bicycle-outline' };
       case 'delivered':
@@ -69,7 +72,7 @@ export default function OrderHistoryScreen({ navigation }) {
     });
 
     const itemsSummary = item.items
-      ?.map(el => `${el.product?.name || 'Item'} (${el.quantity} ${el.product?.unit || ''})`)
+      ?.map(el => `${el.product?.name || 'Item'} (${el.quantity} x ${el.weight || el.product?.unit || ''})`)
       .join(', ');
 
     return (

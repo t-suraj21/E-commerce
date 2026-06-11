@@ -46,6 +46,12 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8ad00a05-dc50-41d3-a94d-c8681c7e0682"
+      }
+    },
+    "owner": "t_suraj21"
   }
 }

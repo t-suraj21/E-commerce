@@ -2,6 +2,41 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import { AuthContext } from './AuthContext';
 import apiClient from '../api/client';
 
+// Helper to calculate price based on weight
+export const calculateWeightPrice = (product, basePrice, weight) => {
+  if (!weight || !product) return basePrice;
+  
+  const unit = (product.unit || '').toLowerCase();
+  if (unit !== 'kg' && unit !== 'gram') {
+    const name = (product.name || '').toLowerCase();
+    const keywords = ['rice', 'flour', 'floar', 'maida', 'sugar', 'daal', 'humad', 'misri', 'badam', 'channa', 'jawain', 'mangraila', 'dal'];
+    const matchesKeyword = keywords.some(keyword => name.includes(keyword));
+    if (!matchesKeyword) return basePrice;
+  }
+
+  const match = weight.match(/^(\d+)\s*(gm|g|kg)$/i);
+  if (!match) return basePrice;
+  
+  const value = parseFloat(match[1]);
+  const matchUnit = match[2].toLowerCase();
+  
+  if (matchUnit === 'gm' || matchUnit === 'g') {
+    if (unit === 'gram') {
+      return basePrice * value;
+    } else {
+      return (basePrice / 1000) * value;
+    }
+  } else if (matchUnit === 'kg') {
+    if (unit === 'gram') {
+      return basePrice * 1000 * value;
+    } else {
+      return basePrice * value;
+    }
+  }
+  return basePrice;
+};
+
+
 export const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
@@ -33,9 +68,9 @@ export const CartProvider = ({ children }) => {
     setAppliedCoupon(null); // Reset coupon when user changes/logs out
   }, [user]);
 
-  const addToCart = async (productId, quantity = 1) => {
+  const addToCart = async (productId, quantity = 1, weight = '1kg') => {
     try {
-      const response = await apiClient.post('/cart', { productId, quantity });
+      const response = await apiClient.post('/cart', { productId, quantity, weight });
       if (response.data.success) {
         await fetchCart();
         return { success: true };
@@ -49,9 +84,9 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const updateQuantity = async (productId, quantity) => {
+  const updateQuantity = async (productId, quantity, weight = '1kg') => {
     try {
-      const response = await apiClient.put(`/cart/${productId}`, { quantity });
+      const response = await apiClient.put(`/cart/${productId}`, { quantity, weight });
       if (response.data.success) {
         await fetchCart();
         return { success: true };
@@ -65,9 +100,9 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const removeFromCart = async (productId) => {
+  const removeFromCart = async (productId, weight = '1kg') => {
     try {
-      const response = await apiClient.delete(`/cart/${productId}`);
+      const response = await apiClient.delete(`/cart/${productId}`, { data: { weight } });
       if (response.data.success) {
         await fetchCart();
         return { success: true };
@@ -121,8 +156,9 @@ export const CartProvider = ({ children }) => {
   // Pricing calculations
   const getCartOriginalTotal = () => {
     return cartItems.reduce((total, item) => {
-      const price = parseFloat(item.product?.price || 0);
-      return total + price * item.quantity;
+      const basePrice = parseFloat(item.product?.price || 0);
+      const originalPrice = calculateWeightPrice(item.product, basePrice, item.weight);
+      return total + originalPrice * item.quantity;
     }, 0);
   };
 
@@ -130,7 +166,8 @@ export const CartProvider = ({ children }) => {
     return cartItems.reduce((total, item) => {
       const product = item.product;
       if (!product) return total;
-      const originalPrice = parseFloat(product.price);
+      const basePrice = parseFloat(product.price);
+      const originalPrice = calculateWeightPrice(product, basePrice, item.weight);
       const discountPercent = product.discountPercent || 0;
       const discountedPrice = originalPrice - (originalPrice * discountPercent) / 100;
       return total + discountedPrice * item.quantity;
@@ -204,7 +241,8 @@ export const CartProvider = ({ children }) => {
       cartTax: tax,
       cartDeliveryCharge: deliveryCharge,
       cartGrandTotal: grandTotal,
-      cartCount: getCartCount()
+      cartCount: getCartCount(),
+      calculateWeightPrice
     }}>
       {children}
     </CartContext.Provider>

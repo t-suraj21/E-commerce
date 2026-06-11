@@ -33,7 +33,8 @@ export default function CheckoutScreen({ navigation }) {
     cartCouponDiscount,
     cartTax,
     cartDeliveryCharge,
-    cartGrandTotal
+    cartGrandTotal,
+    calculateWeightPrice
   } = useContext(CartContext);
 
   const { t, locale } = useContext(LanguageContext);
@@ -94,7 +95,8 @@ export default function CheckoutScreen({ navigation }) {
   const getItemPricing = (item) => {
     const product = item.product;
     if (!product) return { originalPrice: 0, finalPrice: 0, hasDiscount: false, itemTotal: 0 };
-    const originalPrice = parseFloat(product.price);
+    const baseOriginalPrice = parseFloat(product.price);
+    const originalPrice = calculateWeightPrice(product, baseOriginalPrice, item.weight);
     const hasDiscount = product.discountPercent > 0;
     const finalPrice = hasDiscount
       ? originalPrice - (originalPrice * product.discountPercent) / 100
@@ -136,7 +138,7 @@ export default function CheckoutScreen({ navigation }) {
                 />
                 <View style={styles.orderItemDetails}>
                   <Text style={styles.orderItemName} numberOfLines={2}>{product.name}</Text>
-                  <Text style={styles.orderItemUnit}>{product.unit}</Text>
+                  <Text style={styles.orderItemUnit}>{item.weight || product.unit}</Text>
 
                   <View style={styles.orderItemPriceRow}>
                     <Text style={styles.orderItemFinalPrice}>₹{finalPrice.toFixed(0)}</Text>

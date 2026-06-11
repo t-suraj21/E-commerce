@@ -17,6 +17,11 @@ const OrderItem = sequelize.define('OrderItem', {
   price: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
+  },
+  weight: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: '1kg'
   }
 }, {
   timestamps: true,

@@ -14,6 +14,7 @@ import { SPACING, SIZES, SHADOWS } from '../../styles/theme';
 import apiClient from '../../api/client';
 import { LanguageContext } from '../../context/LanguageContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { NotificationContext } from '../../context/NotificationContext';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,7 @@ export default function DashboardScreen({ navigation }) {
 
   const { t, locale } = useContext(LanguageContext);
   const { theme, isDarkMode } = useContext(ThemeContext);
+  const { unreadCount } = useContext(NotificationContext);
 
   const styles = getStyles(theme);
 
@@ -233,7 +235,10 @@ export default function DashboardScreen({ navigation }) {
       case 'pending':
         return styles.statusPending;
       case 'confirmed':
-        return styles.statusConfirmed;
+      case 'accepted':
+        return styles.statusAccepted || styles.statusConfirmed;
+      case 'packed':
+        return styles.statusPacked;
       case 'delivered':
         return styles.statusDelivered;
       default:
@@ -245,8 +250,26 @@ export default function DashboardScreen({ navigation }) {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{locale === 'en' ? 'Sales Dashboard' : 'बिक्री डैशबोर्ड'}</Text>
-        <Text style={styles.headerSubtitle}>Tarun Kirana Store Business Intelligence</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity
+            style={styles.notificationIconBtn}
+            onPress={() => navigation.navigate('NotificationHistory')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="notifications" size={24} color={theme.primary} />
+            {unreadCount > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <View style={{ marginLeft: 12 }}>
+            <Text style={styles.headerTitle}>{locale === 'en' ? 'Sales Dashboard' : 'बिक्री डैशबोर्ड'}</Text>
+            <Text style={styles.headerSubtitle}>Tarun Kirana Store Business Intelligence</Text>
+          </View>
+        </View>
       </View>
 
       {/* Metric Cards Grid */}
@@ -404,6 +427,34 @@ const getStyles = (theme) => StyleSheet.create({
     marginTop: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5
+  },
+  notificationIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: SIZES.radiusRound,
+    backgroundColor: theme.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative'
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: theme.error || '#FF1744',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF'
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800'
   },
   metricsGrid: {
     padding: SPACING.lg,
@@ -739,6 +790,14 @@ const getStyles = (theme) => StyleSheet.create({
   statusConfirmed: {
     backgroundColor: '#E8F5E9',
     color: '#2E7D32'
+  },
+  statusAccepted: {
+    backgroundColor: '#E8F5E9',
+    color: '#2E7D32'
+  },
+  statusPacked: {
+    backgroundColor: '#F3E5F5',
+    color: '#7B1FA2'
   },
   statusDelivered: {
     backgroundColor: '#E8F5E9',

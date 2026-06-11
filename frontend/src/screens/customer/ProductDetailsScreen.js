@@ -24,6 +24,18 @@ import { analytics } from '../../utils/firebase';
 
 const { width } = Dimensions.get('window');
 
+const WEIGHT_OPTIONS = ['100gm', '200gm', '250gm', '500gm', '1kg', '2kg', '3kg', '5kg', '10kg', '25kg'];
+
+const isWeightBasedProduct = (product) => {
+  if (!product) return false;
+  const unit = (product.unit || '').toLowerCase();
+  if (unit === 'kg' || unit === 'gram') return true;
+  
+  const name = (product.name || '').toLowerCase();
+  const keywords = ['rice', 'flour', 'floar', 'maida', 'sugar', 'daal', 'humad', 'misri', 'badam', 'channa', 'jawain', 'mangraila', 'dal'];
+  return keywords.some(keyword => name.includes(keyword));
+};
+
 export default function ProductDetailsScreen({ route, navigation }) {
   const { productId } = route.params;
   const { user } = useContext(AuthContext);
@@ -35,8 +47,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [product, setProduct] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [selectedWeight, setSelectedWeight] = useState('1kg');
 
-  const { addToCart } = useContext(CartContext);
+  const { addToCart, calculateWeightPrice } = useContext(CartContext);
 
   useEffect(() => {
     fetchProductDetails();
@@ -78,14 +91,16 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const handleAddToCart = async () => {
     if (!product) return;
-    const result = await addToCart(product.id, quantity);
+    const isWeightBased = isWeightBasedProduct(product);
+    const result = await addToCart(product.id, quantity, isWeightBased ? selectedWeight : product.unit);
     if (result && result.success) {
       await analytics().logEvent('add_to_cart', {
         item_id: product.id.toString(),
         item_name: product.name,
-        quantity: quantity
+        quantity: quantity,
+        weight: isWeightBased ? selectedWeight : product.unit
       });
-      Alert.alert(t('cart'), `Added ${quantity} "${product.name}" to your cart!`);
+      Alert.alert(t('cart'), `Added ${quantity} x ${isWeightBased ? selectedWeight : product.unit} of "${product.name}" to your cart!`);
       navigation.navigate('CartTab');
     } else {
       Alert.alert('Error', result?.message || 'Failed to add item to cart.');
@@ -102,8 +117,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
     );
   }
 
+  const isWeightBased = isWeightBasedProduct(product);
+  const baseOriginalPrice = parseFloat(product.price);
+  const originalPrice = isWeightBased 
+    ? calculateWeightPrice(product, baseOriginalPrice, selectedWeight)
+    : baseOriginalPrice;
+
   const hasDiscount = product.discountPercent > 0;
-  const originalPrice = parseFloat(product.price);
   const finalPrice = hasDiscount
     ? originalPrice - (originalPrice * product.discountPercent) / 100
     : originalPrice;
@@ -134,7 +154,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <View style={styles.detailsCard}>
           <Text style={styles.categoryLabel}>{product.category?.name || 'Grocery'}</Text>
           <Text style={styles.productName}>{product.name}</Text>
-          <Text style={styles.productUnit}>{product.unit}</Text>
+          <Text style={styles.productUnit}>{isWeightBased ? selectedWeight : product.unit}</Text>
 
           <View style={styles.priceRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -144,6 +164,34 @@ export default function ProductDetailsScreen({ route, navigation }) {
               )}
             </View>
           </View>
+
+          {/* Weight Selector */}
+          {isWeightBased && (
+            <View style={styles.weightSelectorSection}>
+              <Text style={styles.label}>{locale === 'en' ? 'Select Weight' : 'वजन चुनें'}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weightSelectorScroll}>
+                {WEIGHT_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[
+                      styles.weightOptBtn,
+                      selectedWeight === opt && styles.selectedWeightOptBtn
+                    ]}
+                    onPress={() => setSelectedWeight(opt)}
+                  >
+                    <Text
+                      style={[
+                        styles.weightOptText,
+                        selectedWeight === opt && styles.selectedWeightOptText
+                      ]}
+                    >
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Description */}
           {product.description ? (
@@ -498,6 +546,38 @@ const getStyles = (theme) => StyleSheet.create({
   outOfStockText: {
     color: theme.error,
     fontSize: 16,
+    fontWeight: '800'
+  },
+  weightSelectorSection: {
+    marginTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+    paddingTop: SPACING.sm
+  },
+  weightSelectorScroll: {
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs
+  },
+  weightOptBtn: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: SIZES.radiusSm,
+    borderWidth: 1.5,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+    marginRight: SPACING.xs
+  },
+  selectedWeightOptBtn: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primaryLight
+  },
+  weightOptText: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    fontWeight: '700'
+  },
+  selectedWeightOptText: {
+    color: theme.primary,
     fontWeight: '800'
   }
 });

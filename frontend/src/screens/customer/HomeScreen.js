@@ -20,6 +20,7 @@ import { CartContext } from '../../context/CartContext';
 import { AuthContext } from '../../context/AuthContext';
 import { LanguageContext } from '../../context/LanguageContext';
 import { ThemeContext } from '../../context/ThemeContext';
+import { NotificationContext } from '../../context/NotificationContext';
 import { getImageUrl } from '../../utils/imageUtils';
 
 
@@ -30,6 +31,7 @@ export default function HomeScreen({ navigation }) {
   const { addToCart } = useContext(CartContext);
   const { theme, isDarkMode } = useContext(ThemeContext);
   const { t, locale } = useContext(LanguageContext);
+  const { unreadCount } = useContext(NotificationContext);
 
   const styles = getStyles(theme);
 
@@ -178,11 +180,27 @@ export default function HomeScreen({ navigation }) {
       {/* Search Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.welcomeText}>
-              {locale === 'en' ? 'Hello,' : 'नमस्ते,'} {user?.name || 'Guest'}
-            </Text>
-            <Text style={styles.storeName}>{t('appName')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity
+              style={styles.notificationIconBtn}
+              onPress={() => navigation.navigate('NotificationHistory')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="notifications" size={24} color={theme.primary} />
+              {unreadCount > 0 && (
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <View style={{ marginLeft: 12 }}>
+              <Text style={styles.welcomeText}>
+                {locale === 'en' ? 'Hello,' : 'नमस्ते,'} {user?.name || 'Guest'}
+              </Text>
+              <Text style={styles.storeName}>{t('appName')}</Text>
+            </View>
           </View>
         </View>
 
@@ -371,6 +389,34 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     color: theme.primary
+  },
+  notificationIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: SIZES.radiusRound,
+    backgroundColor: theme.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative'
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: theme.error || '#FF1744',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF'
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800'
   },
   wishlistIcon: {
     width: 38,

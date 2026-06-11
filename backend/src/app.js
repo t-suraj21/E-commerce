@@ -35,7 +35,7 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests from this IP, please try again after 15 minutes' },
-  skip: (req, res) => process.env.NODE_ENV === 'test'
+  skip: (req, res) => process.env.NODE_ENV !== 'production'
 });
 
 const authLimiter = rateLimit({
@@ -44,7 +44,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many authentication attempts, please try again after 15 minutes' },
-  skip: (req, res) => process.env.NODE_ENV === 'test'
+  skip: (req, res) => process.env.NODE_ENV !== 'production'
 });
 
 // Apply general rate limiting

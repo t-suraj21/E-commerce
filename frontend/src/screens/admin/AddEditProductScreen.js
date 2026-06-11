@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Switch,
   Alert,
-  Image
+  Image,
+  Platform,
+  ActionSheetIOS
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -46,6 +48,29 @@ export default function AddEditProductScreen({ route, navigation }) {
   const [discountPercent, setDiscountPercent] = useState(editProduct ? editProduct.discountPercent.toString() : '0');
   
   const [localImages, setLocalImages] = useState([]);
+
+  const showActionSheet = () => {
+    const options = ['Cancel', ...categories.map(cat => cat.name), '+ Add New Category'];
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: 0,
+        title: 'Select Category'
+      },
+      (buttonIndex) => {
+        if (buttonIndex === 0) {
+          // Cancel
+        } else if (buttonIndex === options.length - 1) {
+          setIsAddingCategory(true);
+          setCategoryId(null);
+        } else {
+          const selectedCat = categories[buttonIndex - 1];
+          setCategoryId(selectedCat.id);
+          setIsAddingCategory(false);
+        }
+      }
+    );
+  };
 
   const existingImages = [];
   if (editProduct?.imageUrl) existingImages.push(editProduct.imageUrl);
@@ -229,27 +254,41 @@ export default function AddEditProductScreen({ route, navigation }) {
               <ActivityIndicator size="small" color={theme.primary} />
             ) : (
               <View>
-                <View style={styles.pickerDropdownContainer}>
-                  <Picker
-                    selectedValue={categoryId}
-                    onValueChange={(itemValue) => {
-                      if (itemValue === 'ADD_NEW') {
-                        setIsAddingCategory(true);
-                        setCategoryId(null);
-                      } else {
-                        setCategoryId(itemValue);
-                        setIsAddingCategory(false);
-                      }
-                    }}
-                    style={styles.pickerDropdown}
+                {Platform.OS === 'ios' ? (
+                  <TouchableOpacity
+                    style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                    onPress={showActionSheet}
                   >
-                    <Picker.Item label="Select a category..." value={null} />
-                    {categories.map(cat => (
-                      <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
-                    ))}
-                    <Picker.Item label="+ Add New Category" value="ADD_NEW" color={theme.primary} />
-                  </Picker>
-                </View>
+                    <Text style={{ color: categoryId ? theme.text : theme.textLight, fontSize: 14 }}>
+                      {categoryId
+                        ? categories.find(c => c.id === categoryId)?.name || 'Select a category...'
+                        : 'Select a category...'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={theme.textLight} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.pickerDropdownContainer}>
+                    <Picker
+                      selectedValue={categoryId}
+                      onValueChange={(itemValue) => {
+                        if (itemValue === 'ADD_NEW') {
+                          setIsAddingCategory(true);
+                          setCategoryId(null);
+                        } else {
+                          setCategoryId(itemValue);
+                          setIsAddingCategory(false);
+                        }
+                      }}
+                      style={styles.pickerDropdown}
+                    >
+                      <Picker.Item label="Select a category..." value={null} />
+                      {categories.map(cat => (
+                        <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+                      ))}
+                      <Picker.Item label="+ Add New Category" value="ADD_NEW" color={theme.primary} />
+                    </Picker>
+                  </View>
+                )}
                 {isAddingCategory && (
                   <View style={styles.addCategoryContainer}>
                     <TextInput

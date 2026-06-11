@@ -8,6 +8,7 @@ import { ThemeProvider } from './src/context/ThemeContext';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AppNavigator from './src/navigation/AppNavigator';
+import { NotificationProvider } from './src/context/NotificationContext';
 
 if (Platform.OS === 'android') {
   Notifications.setNotificationChannelAsync('default', {
@@ -25,8 +26,10 @@ export default function App() {
         <ThemeProvider>
           <AuthProvider>
             <CartProvider>
-              <AppNavigator />
-              <StatusBar style="auto" />
+              <NotificationProvider>
+                <AppNavigator />
+                <StatusBar style="auto" />
+              </NotificationProvider>
             </CartProvider>
           </AuthProvider>
         </ThemeProvider>

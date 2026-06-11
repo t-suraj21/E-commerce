@@ -19,7 +19,7 @@ export default function ManageOrdersScreen({ navigation }) {
 
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
-  const [selectedStatus, setSelectedStatus] = useState('all'); // all, pending, confirmed, out_for_delivery, delivered, cancelled
+  const [selectedStatus, setSelectedStatus] = useState('all'); // all, pending, accepted, packed, out_for_delivery, delivered, cancelled
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -62,7 +62,9 @@ export default function ManageOrdersScreen({ navigation }) {
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return { bg: '#FFF3E0', text: '#E65100' };
-      case 'confirmed': return { bg: '#E8F5E9', text: '#2E7D32' };
+      case 'confirmed':
+      case 'accepted': return { bg: '#E8F5E9', text: '#2E7D32' };
+      case 'packed': return { bg: '#F3E5F5', text: '#7B1FA2' };
       case 'out_for_delivery': return { bg: '#E3F2FD', text: '#0D47A1' };
       case 'delivered': return { bg: '#E8F5E9', text: '#1B5E20' };
       case 'cancelled': return { bg: '#FFEBEE', text: '#C62828' };
@@ -151,7 +153,8 @@ export default function ManageOrdersScreen({ navigation }) {
           data={[
             { key: 'all', label: 'All' },
             { key: 'pending', label: 'Pending' },
-            { key: 'confirmed', label: 'Confirmed' },
+            { key: 'accepted', label: 'Accepted' },
+            { key: 'packed', label: 'Packed' },
             { key: 'out_for_delivery', label: 'Out for Delivery' },
             { key: 'delivered', label: 'Delivered' },
             { key: 'cancelled', label: 'Cancelled' }

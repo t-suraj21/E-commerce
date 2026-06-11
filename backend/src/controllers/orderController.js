@@ -2,6 +2,41 @@ const { sequelize } = require('../config/db');
 const { Order, OrderItem, CartItem, Product, Address, User, Payment, Coupon } = require('../models');
 const { sendNotificationToUser, sendNotificationToRole } = require('../services/notificationService');
 const whatsappService = require('../services/whatsappCloudService');
+
+// Helper to calculate price based on weight
+const calculateWeightPrice = (product, basePrice, weight) => {
+  if (!weight || !product) return basePrice;
+  
+  const unit = (product.unit || '').toLowerCase();
+  if (unit !== 'kg' && unit !== 'gram') {
+    const name = (product.name || '').toLowerCase();
+    const keywords = ['rice', 'flour', 'floar', 'maida', 'sugar', 'daal', 'humad', 'misri', 'badam', 'channa', 'jawain', 'mangraila', 'dal'];
+    const matchesKeyword = keywords.some(keyword => name.includes(keyword));
+    if (!matchesKeyword) return basePrice;
+  }
+
+  const match = weight.match(/^(\d+)\s*(gm|g|kg)$/i);
+  if (!match) return basePrice;
+  
+  const value = parseFloat(match[1]);
+  const matchUnit = match[2].toLowerCase();
+  
+  if (matchUnit === 'gm' || matchUnit === 'g') {
+    if (unit === 'gram') {
+      return basePrice * value;
+    } else {
+      return (basePrice / 1000) * value;
+    }
+  } else if (matchUnit === 'kg') {
+    if (unit === 'gram') {
+      return basePrice * 1000 * value;
+    } else {
+      return basePrice * value;
+    }
+  }
+  return basePrice;
+};
+
 // @desc    Create an order (Checkout)
 // @route   POST /api/orders
 // @access  Private (Customer)
@@ -59,14 +94,18 @@ const createOrder = async (req, res) => {
       }
 
       const originalPrice = parseFloat(product.price);
-      const discountedPrice = product.discountPrice ? parseFloat(product.discountPrice) : originalPrice - (originalPrice * (product.discountPercent || 0)) / 100;
+      const weightPrice = calculateWeightPrice(product, originalPrice, item.weight);
+      const discountedPrice = product.discountPrice 
+        ? calculateWeightPrice(product, parseFloat(product.discountPrice), item.weight)
+        : weightPrice - (weightPrice * (product.discountPercent || 0)) / 100;
       const itemTotal = discountedPrice * item.quantity;
       subtotal += itemTotal;
-
+ 
       itemsToCreate.push({
         productId: product.id,
         quantity: item.quantity,
-        price: discountedPrice // Capture the purchase price (discounted)
+        price: discountedPrice, // Capture the purchase price (discounted)
+        weight: item.weight
       });
     }
 
@@ -146,7 +185,8 @@ const createOrder = async (req, res) => {
         orderId: order.id,
         productId: item.productId,
         quantity: item.quantity,
-        price: item.price
+        price: item.price,
+        weight: item.weight
       }, { transaction });
 
       // Deduct stock

@@ -69,7 +69,9 @@ export default function OrderTrackingScreen({ route, navigation }) {
   const getStepIndex = (status) => {
     switch (status) {
       case 'pending': return 0;
-      case 'confirmed': return 1;
+      case 'confirmed':
+      case 'accepted':
+      case 'packed': return 1;
       case 'out_for_delivery': return 2;
       case 'delivered': return 3;
       case 'cancelled': return -1;
@@ -182,7 +184,12 @@ export default function OrderTrackingScreen({ route, navigation }) {
           ) : (
             <View style={styles.timeline}>
               {renderTimelineStep(0, 'Order Placed', 'We have received your order request.', activeIndex)}
-              {renderTimelineStep(1, 'Order Confirmed', 'Tarun Kirana Store has confirmed and packed your items.', activeIndex)}
+              {renderTimelineStep(
+                1,
+                order.status === 'packed' ? 'Order Packed' : 'Order Confirmed',
+                order.status === 'packed' ? 'Tarun Kirana Store has packed your items.' : 'Tarun Kirana Store has confirmed your order.',
+                activeIndex
+              )}
               {renderTimelineStep(2, 'Out for Delivery', 'Our delivery agent is bringing your package.', activeIndex)}
               {renderTimelineStep(3, 'Delivered', 'Delivered safely at your doorstep.', activeIndex, true)}
             </View>
@@ -229,7 +236,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
             <View style={styles.itemRow} key={item.id}>
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName}>{item.product?.name || 'Kirana Item'}</Text>
-                <Text style={styles.itemMeta}>{item.quantity} x ₹{parseFloat(item.price).toFixed(2)} ({item.product?.unit || 'pc'})</Text>
+                <Text style={styles.itemMeta}>{item.quantity} x ₹{parseFloat(item.price).toFixed(2)} ({item.weight || item.product?.unit || 'pc'})</Text>
               </View>
               <Text style={styles.itemTotal}>₹{(parseFloat(item.price) * item.quantity).toFixed(2)}</Text>
             </View>

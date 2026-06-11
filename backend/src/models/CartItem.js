@@ -14,6 +14,11 @@ const CartItem = sequelize.define('CartItem', {
     validate: {
       min: 1
     }
+  },
+  weight: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: '1kg'
   }
 }, {
   timestamps: true,

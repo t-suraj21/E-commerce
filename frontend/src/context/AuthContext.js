@@ -12,23 +12,39 @@ export const AuthProvider = ({ children }) => {
   const checkLoginStatus = async () => {
     try {
       const storedToken = await AsyncStorage.getItem('token');
+      const storedUser = await AsyncStorage.getItem('user');
+
       if (storedToken) {
         setToken(storedToken);
-        // Verify token with backend
-        const response = await apiClient.get('/auth/profile', {
-          headers: { Authorization: `Bearer ${storedToken}` }
-        });
-        if (response.data.success) {
-          setUser(response.data.user);
-        } else {
-          await logout();
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+
+        // Try to verify token with backend in background
+        try {
+          const response = await apiClient.get('/auth/profile', {
+            headers: { Authorization: `Bearer ${storedToken}` }
+          });
+          if (response.data.success) {
+            setUser(response.data.user);
+            await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+          } else {
+            await logout();
+          }
+        } catch (backendError) {
+          // Check if it is an explicit auth error (401 or 403) from the server
+          if (backendError.response && (backendError.response.status === 401 || backendError.response.status === 403)) {
+            console.log('Token is invalid or expired. Resetting auth state.');
+            await logout();
+          } else {
+            // Server is offline, network glitch, or connection timeout
+            // DO NOT log out. Keep the offline session active!
+            console.log('Server is offline or network error. Preserving cached session.');
+          }
         }
       }
     } catch (error) {
-      console.log('No valid token found or server offline. Resetting auth state.');
-      // Keep state clear
-      setUser(null);
-      setToken(null);
+      console.log('Error reading storage:', error.message);
     } finally {
       setIsLoading(false);
     }
@@ -45,6 +61,7 @@ export const AuthProvider = ({ children }) => {
       if (response.data.success) {
         const { token: userToken, user: userData } = response.data;
         await AsyncStorage.setItem('token', userToken);
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
         setToken(userToken);
         setUser(userData);
         return { success: true };
@@ -67,6 +84,7 @@ export const AuthProvider = ({ children }) => {
       if (response.data.success) {
         const { token: userToken, user: userData } = response.data;
         await AsyncStorage.setItem('token', userToken);
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
         setToken(userToken);
         setUser(userData);
         return { success: true };
@@ -95,6 +113,7 @@ export const AuthProvider = ({ children }) => {
       if (response.data.success) {
         const { token: userToken, user: userData } = response.data;
         await AsyncStorage.setItem('token', userToken);
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
         setToken(userToken);
         setUser(userData);
         return { success: true };
@@ -118,6 +137,7 @@ export const AuthProvider = ({ children }) => {
       });
       if (response.data.success) {
         setUser(response.data.user);
+        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
         return { success: true };
       }
     } catch (error) {
@@ -134,6 +154,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
       setToken(null);
       setUser(null);
     } catch (error) {

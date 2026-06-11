@@ -59,7 +59,9 @@ export default function OrderDetailsScreen({ route, navigation }) {
   const getStatusBadgeColor = (status) => {
     switch (status) {
       case 'pending': return { bg: '#FFF3E0', text: '#E65100' };
-      case 'confirmed': return { bg: '#E8F5E9', text: '#2E7D32' };
+      case 'confirmed':
+      case 'accepted': return { bg: '#E8F5E9', text: '#2E7D32' };
+      case 'packed': return { bg: '#F3E5F5', text: '#7B1FA2' };
       case 'out_for_delivery': return { bg: '#E3F2FD', text: '#0D47A1' };
       case 'delivered': return { bg: '#E8F5E9', text: '#1B5E20' };
       case 'cancelled': return { bg: '#FFEBEE', text: '#C62828' };
@@ -161,7 +163,7 @@ export default function OrderDetailsScreen({ route, navigation }) {
                 {item.product?.name || 'Kirana Item'}
               </Text>
               <Text style={[styles.itemMeta, { flex: 1, textAlign: 'center', marginTop: 0 }]}>
-                {item.quantity} {item.product?.unit || 'pc'}
+                {item.quantity} x {item.weight || item.product?.unit || 'pc'}
               </Text>
               <Text style={[styles.itemPrice, { flex: 1, textAlign: 'right' }]}>
                 ₹{(parseFloat(item.price) * item.quantity).toFixed(2)}
@@ -186,10 +188,10 @@ export default function OrderDetailsScreen({ route, navigation }) {
             <View style={styles.actionsBlock}>
               <TouchableOpacity
                 style={[styles.actionBtn, styles.acceptBtn]}
-                onPress={() => handleUpdateStatus('confirmed')}
+                onPress={() => handleUpdateStatus('accepted')}
               >
                 <Ionicons name="checkmark-circle-outline" size={18} color={theme.white} />
-                <Text style={styles.actionBtnText}>Confirm Order</Text>
+                <Text style={styles.actionBtnText}>Accept Order</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -200,7 +202,15 @@ export default function OrderDetailsScreen({ route, navigation }) {
                 <Text style={styles.actionBtnText}>Cancel Order</Text>
               </TouchableOpacity>
             </View>
-          ) : order.status === 'confirmed' ? (
+          ) : order.status === 'accepted' ? (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.packBtn]}
+              onPress={() => handleUpdateStatus('packed')}
+            >
+              <Ionicons name="cube-outline" size={20} color={theme.white} />
+              <Text style={styles.actionBtnText}>Mark Packed & Ready</Text>
+            </TouchableOpacity>
+          ) : order.status === 'packed' ? (
             <TouchableOpacity
               style={[styles.actionBtn, styles.deliveryBtn]}
               onPress={() => handleUpdateStatus('out_for_delivery')}
@@ -214,7 +224,7 @@ export default function OrderDetailsScreen({ route, navigation }) {
               onPress={() => handleUpdateStatus('delivered')}
             >
               <Ionicons name="gift-outline" size={20} color={theme.white} />
-              <Text style={styles.actionBtnText}>Mark Delivered & Paid</Text>
+              <Text style={styles.actionBtnText}>Mark Delivered</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.completedAlert}>
@@ -410,6 +420,9 @@ const getStyles = (theme) => StyleSheet.create({
   },
   acceptBtn: {
     backgroundColor: theme.primary
+  },
+  packBtn: {
+    backgroundColor: '#7B1FA2'
   },
   cancelBtn: {
     backgroundColor: theme.error
