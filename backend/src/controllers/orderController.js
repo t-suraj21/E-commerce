@@ -145,9 +145,9 @@ const createOrder = async (req, res) => {
       deliveryCharge = 0.00;
     }
 
-    // 6. Calculate tax (5% GST of taxable amount = subtotal - discount)
+    // 6. Calculate tax (GST is removed, tax is 0.00)
     const taxableAmount = Math.max(0, subtotal - discount);
-    const tax = parseFloat((taxableAmount * 0.05).toFixed(2));
+    const tax = 0.00;
 
     // 7. Calculate grand total
     const totalPrice = parseFloat((taxableAmount + tax + deliveryCharge).toFixed(2));
