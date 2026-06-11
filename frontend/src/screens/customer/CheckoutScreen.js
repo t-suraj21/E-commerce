@@ -244,10 +244,7 @@ export default function CheckoutScreen({ navigation }) {
               </Text>
             </View>
           )}
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>{t('gst')}</Text>
-            <Text style={styles.priceValue}>₹{cartTax.toFixed(0)}</Text>
-          </View>
+
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>{t('deliveryCharges')}</Text>
             <Text style={[styles.priceValue, cartDeliveryCharge === 0 && { color: theme.success, fontWeight: '700' }]}>

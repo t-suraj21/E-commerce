@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   ScrollView
 } from 'react-native';
 import { AuthContext } from '../../context/AuthContext';
-import { COLORS, SPACING, SIZES } from '../../styles/theme';
+import { COLORS, SPACING, SIZES, SHADOWS } from '../../styles/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { analytics } from '../../utils/firebase';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName] = useState('');
@@ -22,7 +24,15 @@ export default function RegisterScreen({ navigation }) {
   const [role, setRole] = useState('customer'); // default customer
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const { register, isLoading } = useContext(AuthContext);
+  const { register, googleLogin, isLoading } = useContext(AuthContext);
+
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: '1079591731539-1adt18ka2qqjbktoe81je05r835ds480.apps.googleusercontent.com',
+      iosClientId: '1079591731539-33k2hf1nc8357p3vpoopb53b9kcc0e9f.apps.googleusercontent.com',
+      offlineAccess: true,
+    });
+  }, []);
 
   const handleRegister = async () => {
     if (!name || !email || !password) {
@@ -33,6 +43,35 @@ export default function RegisterScreen({ navigation }) {
     const result = await register(name.trim(), email.trim(), password, role, phone.trim());
     if (!result.success) {
       setErrorMessage(result.message);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setErrorMessage('');
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.idToken || (userInfo.data && userInfo.data.idToken);
+      if (!idToken) {
+        throw new Error('No ID token received from Google');
+      }
+      
+      const result = await googleLogin(idToken);
+      if (!result.success) {
+        setErrorMessage(result.message);
+      } else {
+        await analytics().logLogin({ method: 'google' });
+      }
+    } catch (error) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        console.log('Google Sign-In Cancelled');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        console.log('Google Sign-In In Progress');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        setErrorMessage('Google Play Services not available or outdated');
+      } else {
+        setErrorMessage(error.message || 'Google Sign-In failed');
+      }
     }
   };
 
@@ -122,7 +161,6 @@ export default function RegisterScreen({ navigation }) {
             </View>
           </View>
 
-
           <TouchableOpacity
             style={[styles.submitButton, isLoading && styles.disabledButton]}
             onPress={handleRegister}
@@ -134,7 +172,22 @@ export default function RegisterScreen({ navigation }) {
               <Text style={styles.submitButtonText}>Create Account</Text>
             )}
           </TouchableOpacity>
-        </View>
+
+          <View style={styles.dividerContainer}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGoogleSignIn}
+            disabled={isLoading}
+          >
+            <Ionicons name="logo-google" size={20} color="#DB4437" style={styles.googleIcon} />
+            <Text style={styles.googleButtonText}>Sign up with Google</Text>
+          </TouchableOpacity>
+         </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>
@@ -275,6 +328,41 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 18,
     fontWeight: '700'
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SPACING.xs
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border
+  },
+  dividerText: {
+    marginHorizontal: SPACING.md,
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '500'
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingVertical: 14,
+    borderRadius: SIZES.radiusMd,
+    ...SHADOWS.sm
+  },
+  googleIcon: {
+    marginRight: 10
+  },
+  googleButtonText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '600'
   },
   footer: {
     flexDirection: 'row',

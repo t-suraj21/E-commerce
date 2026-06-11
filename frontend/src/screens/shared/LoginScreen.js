@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,10 @@ import {
   ScrollView
 } from 'react-native';
 import { AuthContext } from '../../context/AuthContext';
-import { COLORS, SPACING, SIZES } from '../../styles/theme';
+import { COLORS, SPACING, SIZES, SHADOWS } from '../../styles/theme';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
 import { analytics } from '../../utils/firebase';
-
-WebBrowser.maybeCompleteAuthSession();
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -26,44 +23,13 @@ export default function LoginScreen({ navigation }) {
   const [errorMessage, setErrorMessage] = useState('');
   const { login, googleLogin, isLoading } = useContext(AuthContext);
 
-  const webClientId = '1079591731539-1adt18ka2qqjbktoe81je05r835ds480.apps.googleusercontent.com';
-  const androidClientId = '1079591731539-ba7ka2bfme8jbp49ioomrmum4lhpm6hs.apps.googleusercontent.com'; // TODO: Update with real ID
-  const iosClientId = '1079591731539-33k2hf1nc8357p3vpoopb53b9kcc0e9f.apps.googleusercontent.com'; // TODO: Update with real ID
-
-  const isPlatformConfigured = Platform.select({
-    android: androidClientId && !androidClientId.includes('YOUR_'),
-    ios: iosClientId && !iosClientId.includes('YOUR_'),
-    default: true
-  });
-
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    webClientId,
-    ...(isPlatformConfigured ? { androidClientId, iosClientId } : {})
-  });
-
-  React.useEffect(() => {
-    if (response?.type === 'success') {
-      // useIdTokenAuthRequest puts the token in response.params.id_token
-      const idToken = response.params?.id_token;
-      if (idToken) {
-        handleGoogleLogin(idToken);
-      } else {
-        setErrorMessage('Google login succeeded but no ID token was returned. Please try again.');
-      }
-    } else if (response?.type === 'error') {
-      setErrorMessage(response.error?.message || 'Google login failed');
-    }
-  }, [response]);
-
-  const handleGoogleLogin = async (idToken) => {
-    setErrorMessage('');
-    const result = await googleLogin(idToken);
-    if (!result.success) {
-      setErrorMessage(result.message);
-    } else {
-      await analytics().logLogin({ method: 'google' });
-    }
-  };
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: '1079591731539-1adt18ka2qqjbktoe81je05r835ds480.apps.googleusercontent.com',
+      iosClientId: '1079591731539-33k2hf1nc8357p3vpoopb53b9kcc0e9f.apps.googleusercontent.com',
+      offlineAccess: true,
+    });
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -76,6 +42,35 @@ export default function LoginScreen({ navigation }) {
       setErrorMessage(result.message);
     } else {
       await analytics().logLogin({ method: 'email' });
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setErrorMessage('');
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.idToken || (userInfo.data && userInfo.data.idToken);
+      if (!idToken) {
+        throw new Error('No ID token received from Google');
+      }
+      
+      const result = await googleLogin(idToken);
+      if (!result.success) {
+        setErrorMessage(result.message);
+      } else {
+        await analytics().logLogin({ method: 'google' });
+      }
+    } catch (error) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        console.log('Google Sign-In Cancelled');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        console.log('Google Sign-In In Progress');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        setErrorMessage('Google Play Services not available or outdated');
+      } else {
+        setErrorMessage(error.message || 'Google Sign-In failed');
+      }
     }
   };
 
@@ -157,26 +152,20 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
 
           <View style={styles.dividerContainer}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.divider} />
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
           </View>
 
           <TouchableOpacity
             style={styles.googleButton}
-            onPress={() => {
-              if (!isPlatformConfigured) {
-                setErrorMessage(`Google Sign-In is not configured for ${Platform.OS}. Please add the correct Client ID in LoginScreen.js.`);
-                return;
-              }
-              promptAsync();
-            }}
-            disabled={(!request && isPlatformConfigured) || isLoading}
+            onPress={handleGoogleSignIn}
+            disabled={isLoading}
           >
-            <Ionicons name="logo-google" size={20} color={COLORS.primary} style={styles.googleIcon} />
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
+            <Ionicons name="logo-google" size={20} color="#DB4437" style={styles.googleIcon} />
+            <Text style={styles.googleButtonText}>Sign in with Google</Text>
           </TouchableOpacity>
-        </View>
+         </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
@@ -293,9 +282,9 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: SPACING.md
+    marginVertical: SPACING.xs
   },
-  divider: {
+  dividerLine: {
     flex: 1,
     height: 1,
     backgroundColor: COLORS.border
@@ -303,25 +292,27 @@ const styles = StyleSheet.create({
   dividerText: {
     marginHorizontal: SPACING.md,
     color: COLORS.textSecondary,
-    fontWeight: '600'
+    fontSize: 14,
+    fontWeight: '500'
   },
   googleButton: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: COLORS.white,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: SIZES.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...SHADOWS.sm
   },
   googleIcon: {
-    marginRight: SPACING.sm
+    marginRight: 10
   },
   googleButtonText: {
     color: COLORS.text,
     fontSize: 16,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   footer: {
     flexDirection: 'row',

@@ -255,10 +255,7 @@ export default function OrderTrackingScreen({ route, navigation }) {
               </Text>
             </View>
           )}
-          <View style={styles.priceSummaryRow}>
-            <Text style={styles.priceSummaryLabel}>Tax (5% GST)</Text>
-            <Text style={styles.priceSummaryValue}>₹{parseFloat(order.tax || 0).toFixed(2)}</Text>
-          </View>
+
           <View style={styles.priceSummaryRow}>
             <Text style={styles.priceSummaryLabel}>Delivery Charges</Text>
             <Text style={[styles.priceSummaryValue, parseFloat(order.deliveryCharge || 0) === 0 && { color: COLORS.success, fontWeight: '700' }]}>

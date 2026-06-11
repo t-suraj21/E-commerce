@@ -255,10 +255,7 @@ export default function CartScreen({ navigation }) {
           </View>
         )}
 
-        <View style={styles.billRow}>
-          <Text style={[styles.billLabel, { color: theme.textSecondary }]}>{t('gst')}</Text>
-          <Text style={[styles.billValue, { color: theme.text }]}>₹{cartTax.toFixed(0)}</Text>
-        </View>
+
 
         <View style={styles.billRow}>
           <Text style={[styles.billLabel, { color: theme.textSecondary }]}>{t('deliveryCharges')}</Text>

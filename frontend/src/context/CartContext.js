@@ -207,8 +207,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const getTax = (sub, discountVal) => {
-    const taxable = Math.max(0, sub - discountVal);
-    return parseFloat((taxable * 0.05).toFixed(2)); // 5% GST
+    return 0.00; // GST is removed
   };
 
   const getCartCount = () => {
