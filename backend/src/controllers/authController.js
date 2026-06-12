@@ -70,7 +70,9 @@ const loginUser = async (req, res) => {
     const cleanPhone = trimmedInput.replace(/\D/g, '');
     if (cleanPhone.length >= 10) {
       const last10Digits = cleanPhone.slice(-10);
-      queryConditions.push({ phone: { $regex: last10Digits + '$' } });
+      // Construct a regex that allows optional non-digits (\D*) between each digit of the suffix
+      const pattern = last10Digits.split('').map(d => `\\D*${d}`).join('') + '\\D*$';
+      queryConditions.push({ phone: { $regex: pattern } });
     } else {
       queryConditions.push({ phone: trimmedInput });
     }
