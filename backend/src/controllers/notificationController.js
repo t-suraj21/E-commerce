@@ -5,10 +5,8 @@ const { Notification } = require('../models');
 // @access  Private
 const getNotifications = async (req, res) => {
   try {
-    const notifications = await Notification.findAll({
-      where: { userId: req.user.id },
-      order: [['createdAt', 'DESC']]
-    });
+    const notifications = await Notification.find({ userId: req.user.id })
+      .sort({ createdAt: -1 });
     
     res.json({
       success: true,
@@ -27,14 +25,16 @@ const getNotifications = async (req, res) => {
 const markAsRead = async (req, res) => {
   try {
     const notification = await Notification.findOne({
-      where: { id: req.params.id, userId: req.user.id }
+      _id: req.params.id,
+      userId: req.user.id
     });
 
     if (!notification) {
       return res.status(404).json({ success: false, message: 'Notification not found' });
     }
 
-    await notification.update({ isRead: true });
+    notification.isRead = true;
+    await notification.save();
 
     res.json({
       success: true,
@@ -52,9 +52,9 @@ const markAsRead = async (req, res) => {
 // @access  Private
 const markAllAsRead = async (req, res) => {
   try {
-    await Notification.update(
-      { isRead: true },
-      { where: { userId: req.user.id, isRead: false } }
+    await Notification.updateMany(
+      { userId: req.user.id, isRead: false },
+      { $set: { isRead: true } }
     );
 
     res.json({
@@ -72,4 +72,3 @@ module.exports = {
   markAsRead,
   markAllAsRead
 };
-

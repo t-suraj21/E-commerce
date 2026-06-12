@@ -1,33 +1,28 @@
-const { Product, Category, Order, OrderItem, User } = require('../models');
-const { Op } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { Product, Category } = require('../models');
 
 // @desc    Get inventory summary metrics
 // @route   GET /api/inventory/summary
 // @access  Private (Admin)
 const getInventorySummary = async (req, res) => {
   try {
-    const totalProducts = await Product.count();
-    const outOfStock = await Product.count({ where: { stockQuantity: 0 } });
-    const lowStock = await Product.count({
-      where: {
-        stockQuantity: {
-          [Op.gt]: 0,
-          [Op.lt]: 10
-        }
-      }
+    const totalProducts = await Product.countDocuments();
+    const outOfStock = await Product.countDocuments({ stockQuantity: 0 });
+    const lowStock = await Product.countDocuments({
+      stockQuantity: { $gt: 0, $lt: 10 }
     });
     const inStock = totalProducts - outOfStock - lowStock;
 
     // Calculate total inventory valuation: SUM(price * stockQuantity)
-    const valuationResult = await Product.findAll({
-      attributes: [
-        [sequelize.fn('SUM', sequelize.literal('price * stock_quantity')), 'totalValuation']
-      ],
-      raw: true
-    });
+    const valuationResult = await Product.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalValuation: { $sum: { $multiply: ['$price', '$stockQuantity'] } }
+        }
+      }
+    ]);
 
-    const totalValuation = parseFloat(valuationResult[0].totalValuation || 0);
+    const totalValuation = valuationResult.length > 0 ? parseFloat(valuationResult[0].totalValuation || 0) : 0;
 
     res.json({
       success: true,
@@ -55,36 +50,29 @@ const getInventoryItems = async (req, res) => {
     let whereClause = {};
 
     if (search) {
-      whereClause.name = { [Op.like]: `%${search}%` };
+      whereClause.name = { $regex: search, $options: 'i' };
     }
 
     if (status === 'out_of_stock') {
       whereClause.stockQuantity = 0;
     } else if (status === 'low_stock') {
-      whereClause.stockQuantity = {
-        [Op.gt]: 0,
-        [Op.lt]: 10
-      };
+      whereClause.stockQuantity = { $gt: 0, $lt: 10 };
     } else if (status === 'in_stock') {
-      whereClause.stockQuantity = {
-        [Op.gte]: 10
-      };
+      whereClause.stockQuantity = { $gte: 10 };
     }
 
-    let sortOrder = [['name', 'ASC']];
+    let sortOrder = { name: 1 };
     if (sortBy === 'stock') {
-      sortOrder = [['stockQuantity', order === 'desc' ? 'DESC' : 'ASC']];
+      sortOrder = { stockQuantity: order === 'desc' ? -1 : 1 };
     } else if (sortBy === 'price') {
-      sortOrder = [['price', order === 'desc' ? 'DESC' : 'ASC']];
+      sortOrder = { price: order === 'desc' ? -1 : 1 };
     } else if (sortBy === 'name') {
-      sortOrder = [['name', order === 'desc' ? 'DESC' : 'ASC']];
+      sortOrder = { name: order === 'desc' ? -1 : 1 };
     }
 
-    const items = await Product.findAll({
-      where: whereClause,
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
-      order: sortOrder
-    });
+    const items = await Product.find(whereClause)
+      .populate('category', 'id name')
+      .sort(sortOrder);
 
     res.json({
       success: true,
@@ -108,13 +96,14 @@ const updateProductStock = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a non-negative stock quantity' });
     }
 
-    const product = await Product.findByPk(req.params.id);
+    const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
     const oldStock = product.stockQuantity;
-    await product.update({ stockQuantity: parseInt(stockQuantity, 10) });
+    product.stockQuantity = parseInt(stockQuantity, 10);
+    await product.save();
 
     res.json({
       success: true,
@@ -138,12 +127,13 @@ const updateProductAvailability = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please specify isActive status' });
     }
 
-    const product = await Product.findByPk(req.params.id);
+    const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    await product.update({ isActive: !!isActive });
+    product.isActive = !!isActive;
+    await product.save();
 
     res.json({
       success: true,
@@ -162,41 +152,34 @@ const updateProductAvailability = async (req, res) => {
 const getInventoryReports = async (req, res) => {
   try {
     // 1. Out of stock products
-    const outOfStockItems = await Product.findAll({
-      where: { stockQuantity: 0 },
-      include: [{ model: Category, as: 'category', attributes: ['name'] }],
-      order: [['name', 'ASC']]
-    });
+    const outOfStockItems = await Product.find({ stockQuantity: 0 })
+      .populate('category', 'name')
+      .sort({ name: 1 });
 
     // 2. Low stock products
-    const lowStockItems = await Product.findAll({
-      where: {
-        stockQuantity: {
-          [Op.gt]: 0,
-          [Op.lt]: 10
-        }
-      },
-      include: [{ model: Category, as: 'category', attributes: ['name'] }],
-      order: [['stockQuantity', 'ASC']]
-    });
+    const lowStockItems = await Product.find({
+      stockQuantity: { $gt: 0, $lt: 10 }
+    })
+      .populate('category', 'name')
+      .sort({ stockQuantity: 1 });
 
     // 3. Category valuation report
-    // select category_id, count(*) as count, sum(stock_quantity) as totalStock, sum(price * stock_quantity) as totalValuation group by category_id
-    const categoryReportRaw = await Product.findAll({
-      attributes: [
-        'categoryId',
-        [sequelize.fn('COUNT', sequelize.col('Product.id')), 'productCount'],
-        [sequelize.fn('SUM', sequelize.col('stock_quantity')), 'totalStock'],
-        [sequelize.fn('SUM', sequelize.literal('price * stock_quantity')), 'categoryValuation']
-      ],
-      include: [{ model: Category, as: 'category', attributes: ['name'] }],
-      group: ['categoryId', 'category.id'],
-      raw: true
-    });
+    const categoryReportRaw = await Product.aggregate([
+      {
+        $group: {
+          _id: '$categoryId',
+          productCount: { $sum: 1 },
+          totalStock: { $sum: '$stockQuantity' },
+          categoryValuation: { $sum: { $multiply: ['$price', '$stockQuantity'] } }
+        }
+      }
+    ]);
 
-    const categoryValuationReport = categoryReportRaw.map(item => ({
-      categoryId: item.categoryId,
-      categoryName: item['category.name'] || 'Uncategorized',
+    const populatedReport = await Category.populate(categoryReportRaw, { path: '_id', select: 'name' });
+
+    const categoryValuationReport = populatedReport.map(item => ({
+      categoryId: item._id ? item._id._id : null,
+      categoryName: item._id ? item._id.name : 'Uncategorized',
       productCount: parseInt(item.productCount || 0, 10),
       totalStock: parseInt(item.totalStock || 0, 10),
       valuation: parseFloat(parseFloat(item.categoryValuation || 0).toFixed(2))

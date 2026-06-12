@@ -1,54 +1,76 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Address = sequelize.define('Address', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true
+const addressSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
   fullName: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    field: 'full_name'
+    type: String,
+    required: true,
+    trim: true
   },
   mobile: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   houseNumber: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    field: 'house_number'
+    type: String,
+    required: true
   },
   street: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   landmark: {
-    type: DataTypes.STRING,
-    allowNull: true
+    type: String,
+    default: null
   },
   city: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   state: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   pincode: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   isDefault: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    field: 'is_default'
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,
-  underscored: true
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
 
+addressSchema.virtual('user', {
+  ref: 'User',
+  localField: 'userId',
+  foreignField: '_id',
+  justOne: true
+});
+
+const Address = mongoose.model('Address', addressSchema);
 module.exports = Address;

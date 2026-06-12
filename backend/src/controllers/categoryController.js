@@ -11,7 +11,7 @@ const getCategories = async (req, res) => {
       return res.json({ success: true, count: cached.length, categories: cached });
     }
 
-    const categories = await Category.findAll({ order: [['name', 'ASC']] });
+    const categories = await Category.find().sort({ name: 1 });
     cacheService.set('categories', categories, 600); // 10 minutes cache
     res.json({ success: true, count: categories.length, categories });
   } catch (error) {
@@ -32,7 +32,7 @@ const createCategory = async (req, res) => {
       imageUrl = `/uploads/products/${req.file.filename}`;
     }
 
-    const categoryExists = await Category.findOne({ where: { name } });
+    const categoryExists = await Category.findOne({ name });
     if (categoryExists) {
       return res.status(400).json({ success: false, message: 'Category already exists' });
     }
@@ -52,7 +52,7 @@ const createCategory = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { name, description } = req.body;
-    const category = await Category.findByPk(req.params.id);
+    const category = await Category.findById(req.params.id);
 
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
@@ -63,7 +63,11 @@ const updateCategory = async (req, res) => {
       imageUrl = `/uploads/products/${req.file.filename}`;
     }
 
-    await category.update({ name, description, imageUrl });
+    category.name = name !== undefined ? name : category.name;
+    category.description = description !== undefined ? description : category.description;
+    category.imageUrl = imageUrl;
+    await category.save();
+
     cacheService.delete('categories');
     res.json({ success: true, category });
   } catch (error) {
@@ -77,13 +81,13 @@ const updateCategory = async (req, res) => {
 // @access  Private (Shopkeeper/Admin)
 const deleteCategory = async (req, res) => {
   try {
-    const category = await Category.findByPk(req.params.id);
+    const category = await Category.findById(req.params.id);
 
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
-    await category.destroy();
+    await category.deleteOne();
     cacheService.delete('categories');
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {

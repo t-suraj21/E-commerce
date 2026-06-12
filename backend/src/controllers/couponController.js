@@ -1,20 +1,14 @@
 const { Coupon } = require('../models');
-const { Op } = require('sequelize');
 
 // @desc    Get active coupons
 // @route   GET /api/coupons/active
 // @access  Public
 const getActiveCoupons = async (req, res) => {
   try {
-    const coupons = await Coupon.findAll({
-      where: {
-        isActive: true,
-        expirationDate: {
-          [Op.gt]: new Date()
-        }
-      },
-      order: [['createdAt', 'DESC']]
-    });
+    const coupons = await Coupon.find({
+      isActive: true,
+      expirationDate: { $gt: new Date() }
+    }).sort({ createdAt: -1 });
 
     res.json({
       success: true,

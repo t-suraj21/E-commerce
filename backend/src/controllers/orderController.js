@@ -1,4 +1,4 @@
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 const { Order, OrderItem, CartItem, Product, Address, User, Payment, Coupon } = require('../models');
 const { sendNotificationToUser, sendNotificationToRole } = require('../services/notificationService');
 
@@ -40,32 +40,23 @@ const calculateWeightPrice = (product, basePrice, weight) => {
 // @route   POST /api/orders
 // @access  Private (Customer)
 const createOrder = async (req, res) => {
-  const transaction = await sequelize.transaction();
   try {
     const { addressId, paymentMethod, couponCode } = req.body;
 
     if (!addressId) {
-      await transaction.rollback();
       return res.status(400).json({ success: false, message: 'Please provide a shipping address' });
     }
 
     // 1. Get address
-    const address = await Address.findOne({
-      where: { id: addressId, userId: req.user.id }
-    });
+    const address = await Address.findOne({ _id: addressId, userId: req.user.id });
     if (!address) {
-      await transaction.rollback();
       return res.status(404).json({ success: false, message: 'Shipping address not found' });
     }
 
     // 2. Get cart items
-    const cartItems = await CartItem.findAll({
-      where: { userId: req.user.id },
-      include: [{ model: Product, as: 'product' }]
-    });
+    const cartItems = await CartItem.find({ userId: req.user.id }).populate('product');
 
     if (!cartItems || cartItems.length === 0) {
-      await transaction.rollback();
       return res.status(400).json({ success: false, message: 'Your cart is empty' });
     }
 
@@ -77,7 +68,6 @@ const createOrder = async (req, res) => {
       const product = item.product;
 
       if (!product || !product.isActive) {
-        await transaction.rollback();
         return res.status(400).json({
           success: false,
           message: `Product "${product ? product.name : 'Unknown'}" is no longer available.`
@@ -85,7 +75,6 @@ const createOrder = async (req, res) => {
       }
 
       if (item.quantity > product.stockQuantity) {
-        await transaction.rollback();
         return res.status(400).json({
           success: false,
           message: `Insufficient stock for "${product.name}". Available: ${product.stockQuantity}`
@@ -101,9 +90,9 @@ const createOrder = async (req, res) => {
       subtotal += itemTotal;
  
       itemsToCreate.push({
-        productId: product.id,
+        productId: product._id,
         quantity: item.quantity,
-        price: discountedPrice, // Capture the purchase price (discounted)
+        price: discountedPrice,
         weight: item.weight
       });
     }
@@ -114,7 +103,7 @@ const createOrder = async (req, res) => {
 
     if (couponCode) {
       const code = couponCode.toUpperCase().trim();
-      const coupon = await Coupon.findOne({ where: { code }, transaction });
+      const coupon = await Coupon.findOne({ code });
       if (coupon && coupon.isActive && new Date(coupon.expirationDate) > new Date()) {
         if (subtotal >= parseFloat(coupon.minOrderAmount)) {
           if (!coupon.usageLimit || coupon.usageCount < coupon.usageLimit) {
@@ -132,7 +121,8 @@ const createOrder = async (req, res) => {
             }
             
             // Increment coupon usage count
-            await coupon.increment('usageCount', { by: 1, transaction });
+            coupon.usageCount += 1;
+            await coupon.save();
           }
         }
       }
@@ -144,7 +134,7 @@ const createOrder = async (req, res) => {
       deliveryCharge = 0.00;
     }
 
-    // 6. Calculate tax (GST is removed, tax is 0.00)
+    // 6. Calculate tax
     const taxableAmount = Math.max(0, subtotal - discount);
     const tax = 0.00;
 
@@ -164,58 +154,48 @@ const createOrder = async (req, res) => {
       status: 'pending',
       paymentStatus: 'pending',
       paymentMethod: paymentMethod || 'cod'
-    }, { transaction });
+    });
 
     // 8.1 Create Payment Record
     const randomSuffix = Math.floor(10000000 + Math.random() * 90000000);
     const transactionId = `TKS-TXN-${(paymentMethod || 'cod').toUpperCase()}-${randomSuffix}`;
     const payment = await Payment.create({
-      orderId: order.id,
+      orderId: order._id,
       userId: req.user.id,
       method: paymentMethod || 'cod',
       amount: totalPrice,
       status: 'pending',
       transactionId
-    }, { transaction });
+    });
 
     // 9. Create Order Items and update product stock
     for (const item of itemsToCreate) {
       await OrderItem.create({
-        orderId: order.id,
+        orderId: order._id,
         productId: item.productId,
         quantity: item.quantity,
         price: item.price,
         weight: item.weight
-      }, { transaction });
+      });
 
       // Deduct stock
-      await Product.decrement('stockQuantity', {
-        by: item.quantity,
-        where: { id: item.productId },
-        transaction
-      });
+      await Product.updateOne(
+        { _id: item.productId },
+        { $inc: { stockQuantity: -item.quantity } }
+      );
     }
 
     // 10. Clear Cart
-    await CartItem.destroy({
-      where: { userId: req.user.id },
-      transaction
-    });
-
-    await transaction.commit();
+    await CartItem.deleteMany({ userId: req.user.id });
 
     // Fetch complete order with items and addresses
-    const completedOrder = await Order.findByPk(order.id, {
-      include: [
-        { model: Address, as: 'address' },
-        {
-          model: OrderItem,
-          as: 'items',
-          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'imageUrl', 'unit'] }]
-        },
-        { model: Payment, as: 'payments' }
-      ]
-    });
+    const completedOrder = await Order.findById(order._id)
+      .populate('address')
+      .populate({
+        path: 'items',
+        populate: { path: 'product', select: 'id name imageUrl unit' }
+      })
+      .populate('payments');
 
     res.status(201).json({ success: true, order: completedOrder, initialPayment: payment });
 
@@ -223,22 +203,19 @@ const createOrder = async (req, res) => {
     sendNotificationToUser(
       req.user.id,
       'Order Placed! 🛍️',
-      `Your order #TKS-${order.id} has been placed. Total Bill: ₹${totalPrice}.`,
-      { orderId: order.id.toString(), type: 'order_placed' }
+      `Your order #TKS-${order._id} has been placed. Total Bill: ₹${totalPrice}.`,
+      { orderId: order._id.toString(), type: 'order_placed' }
     ).catch(err => console.error('Error sending order placed notification:', err));
 
     sendNotificationToRole(
       'admin',
       'New Order Received! 📦',
-      `Order #TKS-${order.id} has been placed by ${req.user.name}.`,
-      { orderId: order.id.toString(), type: 'new_order' }
+      `Order #TKS-${order._id} has been placed by ${req.user.name}.`,
+      { orderId: order._id.toString(), type: 'new_order' }
     ).catch(err => console.error('Error sending shopkeeper notification:', err));
 
-    // WhatsApp Cloud API notification removed
-
   } catch (error) {
-    await transaction.rollback();
-    console.error('Create order transaction error:', error);
+    console.error('Create order error:', error);
     res.status(500).json({ success: false, message: 'Server error processing order checkout' });
   }
 };
@@ -255,20 +232,15 @@ const getOrders = async (req, res) => {
       whereClause.userId = req.user.id;
     }
 
-    const orders = await Order.findAll({
-      where: whereClause,
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] },
-        { model: Address, as: 'address' },
-        {
-          model: OrderItem,
-          as: 'items',
-          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'imageUrl', 'unit'] }]
-        },
-        { model: Payment, as: 'payments' }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
+    const orders = await Order.find(whereClause)
+      .populate({ path: 'user', select: 'id name email phone' })
+      .populate('address')
+      .populate({
+        path: 'items',
+        populate: { path: 'product', select: 'id name imageUrl unit' }
+      })
+      .populate('payments')
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, count: orders.length, orders });
   } catch (error) {
@@ -282,25 +254,21 @@ const getOrders = async (req, res) => {
 // @access  Private
 const getOrderById = async (req, res) => {
   try {
-    const order = await Order.findByPk(req.params.id, {
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] },
-        { model: Address, as: 'address' },
-        {
-          model: OrderItem,
-          as: 'items',
-          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'imageUrl', 'unit'] }]
-        },
-        { model: Payment, as: 'payments' }
-      ]
-    });
+    const order = await Order.findById(req.params.id)
+      .populate({ path: 'user', select: 'id name email phone' })
+      .populate('address')
+      .populate({
+        path: 'items',
+        populate: { path: 'product', select: 'id name imageUrl unit' }
+      })
+      .populate('payments');
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
     // Role security check
-    if (req.user.role === 'customer' && order.userId !== req.user.id) {
+    if (req.user.role === 'customer' && order.userId.toString() !== req.user.id.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized to view this order' });
     }
 
@@ -317,7 +285,7 @@ const getOrderById = async (req, res) => {
 const updateOrderStatus = async (req, res) => {
   try {
     const { status, paymentStatus, rejectionReason } = req.body;
-    const order = await Order.findByPk(req.params.id);
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
@@ -326,7 +294,7 @@ const updateOrderStatus = async (req, res) => {
     // Role based checks
     if (req.user.role === 'customer') {
       // Customer can only cancel their own pending order
-      if (order.userId !== req.user.id) {
+      if (order.userId.toString() !== req.user.id.toString()) {
         return res.status(403).json({ success: false, message: 'Not authorized' });
       }
 
@@ -359,22 +327,27 @@ const updateOrderStatus = async (req, res) => {
 
     // Restore product stock globally on cancellation (customer cancellation or admin rejection)
     if (status === 'cancelled' && oldStatus !== 'cancelled') {
-      const orderItems = await OrderItem.findAll({ where: { orderId: order.id } });
+      const orderItems = await OrderItem.find({ orderId: order._id });
       for (const item of orderItems) {
-        await Product.increment('stockQuantity', {
-          by: item.quantity,
-          where: { id: item.productId }
-        });
+        if (item.productId) {
+          await Product.updateOne(
+            { _id: item.productId },
+            { $inc: { stockQuantity: item.quantity } }
+          );
+        }
       }
     }
 
-    await order.update(updates);
+    order.status = updates.status !== undefined ? updates.status : order.status;
+    order.rejectionReason = updates.rejectionReason !== undefined ? updates.rejectionReason : order.rejectionReason;
+    order.paymentStatus = updates.paymentStatus !== undefined ? updates.paymentStatus : order.paymentStatus;
+    await order.save();
 
     // If the order is marked as paid (e.g., delivered COD), update the payment record
-    if (updates.paymentStatus === 'paid') {
-      await Payment.update(
-        { status: 'success', paidAt: new Date() },
-        { where: { orderId: order.id, status: 'pending' } }
+    if (order.paymentStatus === 'paid') {
+      await Payment.updateMany(
+        { orderId: order._id, status: 'pending' },
+        { $set: { status: 'success', paidAt: new Date() } }
       );
     }
 
@@ -386,58 +359,52 @@ const updateOrderStatus = async (req, res) => {
       switch (status) {
         case 'accepted':
           notifTitle = 'Order Accepted! 🤝';
-          notifBody = `Your order #TKS-${order.id} has been accepted by Tarun Kirana Store and is being processed.`;
+          notifBody = `Your order #TKS-${order._id} has been accepted by Tarun Kirana Store and is being processed.`;
           break;
         case 'packed':
           notifTitle = 'Order Packed! 📦';
-          notifBody = `Your order #TKS-${order.id} has been packed and is ready for delivery.`;
+          notifBody = `Your order #TKS-${order._id} has been packed and is ready for delivery.`;
           break;
         case 'out_for_delivery':
           notifTitle = 'Order Shipped! 🚚';
-          notifBody = `Your order #TKS-${order.id} is out for delivery. Our executive will reach you shortly.`;
+          notifBody = `Your order #TKS-${order._id} is out for delivery. Our executive will reach you shortly.`;
           break;
         case 'delivered':
           notifTitle = 'Order Delivered! 🎉';
-          notifBody = `Your order #TKS-${order.id} has been successfully delivered. Thank you for shopping with us!`;
+          notifBody = `Your order #TKS-${order._id} has been successfully delivered. Thank you for shopping with us!`;
           break;
         case 'cancelled':
           notifTitle = 'Order Cancelled 🛑';
           notifBody = updates.rejectionReason 
-            ? `Your order #TKS-${order.id} was rejected by the store. Reason: ${updates.rejectionReason}`
-            : `Your order #TKS-${order.id} has been cancelled.`;
+            ? `Your order #TKS-${order._id} was rejected by the store. Reason: ${updates.rejectionReason}`
+            : `Your order #TKS-${order._id} has been cancelled.`;
           break;
       }
 
       if (notifTitle && notifBody) {
         // Notify the user
         sendNotificationToUser(order.userId, notifTitle, notifBody, {
-          orderId: order.id.toString(),
+          orderId: order._id.toString(),
           type: 'order_status_update',
           newStatus: status
         }).catch(err => console.error('Error sending order status update notification:', err));
 
         // Notify the admins
-        sendNotificationToRole('admin', `Status Update: ${notifTitle}`, `Order #TKS-${order.id} is now ${status}.`, {
-          orderId: order.id.toString(),
+        sendNotificationToRole('admin', `Status Update: ${notifTitle}`, `Order #TKS-${order._id} is now ${status}.`, {
+          orderId: order._id.toString(),
           type: 'order_status_update',
           newStatus: status
         }).catch(err => console.error('Error sending order status update to admin:', err));
       }
     }
 
-    const updatedOrder = await Order.findByPk(order.id, {
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'name', 'phone'] },
-        { model: Address, as: 'address' },
-        {
-          model: OrderItem,
-          as: 'items',
-          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'imageUrl', 'unit'] }]
-        }
-      ]
-    });
-
-    // WhatsApp Cloud API notification removed
+    const updatedOrder = await Order.findById(order._id)
+      .populate({ path: 'user', select: 'id name phone' })
+      .populate('address')
+      .populate({
+        path: 'items',
+        populate: { path: 'product', select: 'id name imageUrl unit' }
+      });
 
     res.json({ success: true, order: updatedOrder });
   } catch (error) {

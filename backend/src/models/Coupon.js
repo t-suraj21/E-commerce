@@ -1,63 +1,67 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Coupon = sequelize.define('Coupon', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true
-  },
+const couponSchema = new mongoose.Schema({
   code: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
-    set(value) {
-      this.setDataValue('code', value.toUpperCase().trim());
-    }
+    trim: true,
+    set: v => v.toUpperCase().trim()
   },
   discountType: {
-    type: DataTypes.ENUM('percentage', 'flat', 'free_shipping'),
-    allowNull: false,
-    field: 'discount_type'
+    type: String,
+    enum: ['percentage', 'flat', 'free_shipping'],
+    required: true
   },
   discountValue: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    field: 'discount_value'
+    type: Number,
+    required: true
   },
   minOrderAmount: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0.00,
-    field: 'min_order_amount'
+    type: Number,
+    default: 0.00
   },
   maxDiscountAmount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-    field: 'max_discount_amount'
+    type: Number,
+    default: null
   },
   expirationDate: {
-    type: DataTypes.DATE,
-    allowNull: false,
-    field: 'expiration_date'
+    type: Date,
+    required: true
   },
   usageLimit: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    field: 'usage_limit'
+    type: Number,
+    default: null
   },
   usageCount: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'usage_count'
+    type: Number,
+    default: 0
   },
   isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-    field: 'is_active'
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true,
-  underscored: true
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
 
+const Coupon = mongoose.model('Coupon', couponSchema);
 module.exports = Coupon;

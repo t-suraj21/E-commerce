@@ -1,10 +1,9 @@
-const { User, Order, Payment } = require('../models');
+const { User, Order, Payment, Address, CartItem, Notification } = require('../models');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const { secret, expiresIn } = require('../config/jwt');
 const crypto = require('crypto');
-const { sequelize } = require('../config/db');
-const { Op } = require('sequelize');
+const mongoose = require('mongoose');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -17,16 +16,14 @@ const generateToken = (id) => {
 // @access  Public
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, phone } = req.body;
 
     // Check if user already exists
-    const userExists = await User.findOne({ where: { email } });
+    const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ success: false, message: 'User already exists with this email' });
     }
 
-    // Determine role - hardcode to customer for self-registration
-    // Admin is created via seed script
     const userRole = 'customer';
 
     // Create user
@@ -68,12 +65,10 @@ const loginUser = async (req, res) => {
 
     // Find user by email or phone
     const user = await User.findOne({ 
-      where: { 
-        [Op.or]: [
-          { email: email },
-          { phone: email }
-        ]
-      } 
+      $or: [
+        { email: email },
+        { phone: email }
+      ]
     });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email/phone or password' });
@@ -128,7 +123,7 @@ const forgotPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email address' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found with this email' });
     }
@@ -146,7 +141,6 @@ const forgotPassword = async (req, res) => {
     console.log(` Expires at: ${expiry}`);
     console.log(`=========================================`);
 
-    // In production, send SMS/Email. In dev, we return it in response and log it.
     const responsePayload = {
       success: true,
       message: 'OTP sent successfully (Simulated)'
@@ -174,7 +168,7 @@ const verifyOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email and OTP code' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -233,12 +227,11 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid token purpose' });
     }
 
-    const user = await User.findByPk(decoded.id);
+    const user = await User.findById(decoded.id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Update password (model beforeUpdate hook handles hashing)
     user.password = newPassword;
     user.otp = null;
     user.otpExpiry = null;
@@ -264,12 +257,13 @@ const savePushToken = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a push token' });
     }
 
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    await user.update({ pushToken });
+    user.pushToken = pushToken;
+    await user.save();
 
     res.json({
       success: true,
@@ -305,14 +299,12 @@ const googleLogin = async (req, res) => {
     const payload = ticket.getPayload();
     const email = payload.email;
     const name = payload.name;
-    // const googleId = payload.sub; // Can be saved if DB is updated
 
     // 2. Check if user exists
-    let user = await User.findOne({ where: { email } });
+    let user = await User.findOne({ email });
 
     // 3. If not, create them
     if (!user) {
-      // Generate secure random password since they use Google to login
       const randomPassword = crypto.randomBytes(32).toString('hex');
       
       user = await User.create({
@@ -347,15 +339,15 @@ const googleLogin = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { name, phone, password } = req.body;
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findById(req.user.id);
     
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     if (name) user.name = name;
-    if (phone !== undefined) user.phone = phone; // Allow empty phone
-    if (password) user.password = password; // Sets password, will be hashed in beforeUpdate hook
+    if (phone !== undefined) user.phone = phone;
+    if (password) user.password = password;
 
     await user.save();
 
@@ -380,25 +372,26 @@ const updateProfile = async (req, res) => {
 // @route   DELETE /api/auth/profile
 // @access  Private
 const deleteProfile = async (req, res) => {
-  const transaction = await sequelize.transaction();
   try {
-    const user = await User.findByPk(req.user.id, { transaction });
+    const user = await User.findById(req.user.id);
     if (!user) {
-      await transaction.rollback();
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Unlink orders and payments from the user and their addresses to prevent RESTRICT constraint errors
-    await Order.update({ userId: null, addressId: null }, { where: { userId: user.id }, transaction });
-    await Payment.update({ userId: null }, { where: { userId: user.id }, transaction });
+    // Unlink orders and payments from the user and their addresses
+    await Order.updateMany({ userId: user._id }, { $set: { userId: null, addressId: null } });
+    await Payment.updateMany({ userId: user._id }, { $set: { userId: null } });
 
-    // Now delete the user (will cascade to Address, CartItem, Notification)
-    await user.destroy({ transaction });
+    // Delete child dependencies (Address, CartItem, Notification)
+    await Address.deleteMany({ userId: user._id });
+    await CartItem.deleteMany({ userId: user._id });
+    await Notification.deleteMany({ userId: user._id });
 
-    await transaction.commit();
+    // Delete user
+    await user.deleteOne();
+
     res.json({ success: true, message: 'Account deleted permanently' });
   } catch (error) {
-    await transaction.rollback();
     console.error('Delete profile error:', error);
     res.status(500).json({ success: false, message: 'Server error deleting account' });
   }

@@ -17,9 +17,7 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, secret);
 
       // Get user from token and attach to request (excluding password)
-      const user = await User.findByPk(decoded.id, {
-        attributes: { exclude: ['password'] }
-      });
+      const user = await User.findById(decoded.id).select('-password');
 
       if (!user) {
         return res.status(401).json({ success: false, message: 'User not found' });

@@ -1,102 +1,99 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Product = sequelize.define('Product', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true
+const productSchema = new mongoose.Schema({
+  categoryId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    default: null
   },
   name: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true,
+    trim: true
   },
   description: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String,
+    default: null
   },
   price: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    validate: {
-      min: 0
-    }
+    type: Number,
+    required: true,
+    min: 0
   },
   discountPrice: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-    field: 'discount_price',
-    validate: {
-      min: 0
-    }
+    type: Number,
+    default: null,
+    min: 0
   },
   stockQuantity: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    allowNull: false,
-    field: 'stock_quantity',
-    validate: {
-      min: 0
-    }
+    type: Number,
+    default: 0,
+    required: true,
+    min: 0
   },
   unit: {
-    type: DataTypes.ENUM('kg', 'gram', 'liter', 'piece', 'dozen', 'packet'),
-    defaultValue: 'piece',
-    allowNull: false
+    type: String,
+    default: 'piece',
+    required: true
   },
   imageUrl: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    field: 'image_url'
+    type: String,
+    default: null
   },
   isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-    field: 'is_active'
+    type: Boolean,
+    default: true
   },
   isBestSeller: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    field: 'is_best_seller'
+    type: Boolean,
+    default: false
   },
   isTodayDeal: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    field: 'is_today_deal'
+    type: Boolean,
+    default: false
   },
   isNewArrival: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    field: 'is_new_arrival'
+    type: Boolean,
+    default: false
   },
   discountPercent: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'discount_percent',
-    validate: {
-      min: 0,
-      max: 100
-    }
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100
   },
   images: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    defaultValue: '[]',
-    get() {
-      const raw = this.getDataValue('images');
-      try {
-        return raw ? JSON.parse(raw) : [];
-      } catch (err) {
-        return [];
-      }
-    },
-    set(val) {
-      this.setDataValue('images', JSON.stringify(val || []));
-    }
+    type: [String],
+    default: []
   }
 }, {
   timestamps: true,
-  underscored: true
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
 
+productSchema.virtual('category', {
+  ref: 'Category',
+  localField: 'categoryId',
+  foreignField: '_id',
+  justOne: true
+});
+
+const Product = mongoose.model('Product', productSchema);
 module.exports = Product;

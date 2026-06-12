@@ -35,7 +35,7 @@ const sendNotificationToUser = async (userId, title, body, data = {}) => {
       type: getValidType(data)
     });
 
-    const user = await User.findByPk(userId);
+    const user = await User.findById(userId);
     if (!user) {
       console.log(`[Notification] User ID ${userId} not found.`);
       return false;
@@ -63,7 +63,7 @@ const sendNotificationToUser = async (userId, title, body, data = {}) => {
  */
 const sendNotificationToRole = async (role, title, body, data = {}) => {
   try {
-    const users = await User.findAll({ where: { role } });
+    const users = await User.find({ role });
     if (!users || users.length === 0) return true;
 
     // Save to database completely for all users
@@ -74,7 +74,7 @@ const sendNotificationToRole = async (role, title, body, data = {}) => {
       data,
       type: getValidType(data)
     }));
-    await Notification.bulkCreate(notificationsToCreate);
+    await Notification.insertMany(notificationsToCreate);
 
     const messages = [];
     for (let user of users) {
@@ -107,7 +107,7 @@ const sendNotificationToRole = async (role, title, body, data = {}) => {
  */
 const sendBroadcastNotification = async (title, body, data = {}) => {
   try {
-    const users = await User.findAll();
+    const users = await User.find();
     
     // Save to database completely for all users
     const notificationsToCreate = users.map(user => ({
@@ -117,7 +117,7 @@ const sendBroadcastNotification = async (title, body, data = {}) => {
       data,
       type: getValidType(data)
     }));
-    await Notification.bulkCreate(notificationsToCreate);
+    await Notification.insertMany(notificationsToCreate);
 
     const messages = [];
     

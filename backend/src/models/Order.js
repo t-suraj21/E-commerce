@@ -1,71 +1,113 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Order = sequelize.define('Order', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true
+const orderSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  addressId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Address',
+    required: true
   },
   totalPrice: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    field: 'total_price'
+    type: Number,
+    required: true
   },
   subtotal: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    defaultValue: 0.00,
-    field: 'subtotal'
+    type: Number,
+    required: true,
+    default: 0.00
   },
   discount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    defaultValue: 0.00,
-    field: 'discount'
+    type: Number,
+    required: true,
+    default: 0.00
   },
   couponCode: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    field: 'coupon_code'
+    type: String,
+    default: null
   },
   tax: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    defaultValue: 0.00,
-    field: 'tax'
+    type: Number,
+    required: true,
+    default: 0.00
   },
   deliveryCharge: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    defaultValue: 0.00,
-    field: 'delivery_charge'
+    type: Number,
+    required: true,
+    default: 0.00
   },
   status: {
-    type: DataTypes.ENUM('pending', 'accepted', 'packed', 'out_for_delivery', 'delivered', 'cancelled'),
-    defaultValue: 'pending',
-    allowNull: false
+    type: String,
+    enum: ['pending', 'accepted', 'packed', 'out_for_delivery', 'delivered', 'cancelled'],
+    default: 'pending',
+    required: true
   },
   paymentStatus: {
-    type: DataTypes.ENUM('pending', 'paid', 'failed'),
-    defaultValue: 'pending',
-    allowNull: false,
-    field: 'payment_status'
+    type: String,
+    enum: ['pending', 'paid', 'failed'],
+    default: 'pending',
+    required: true
   },
   paymentMethod: {
-    type: DataTypes.ENUM('cod', 'upi', 'razorpay'),
-    defaultValue: 'cod',
-    allowNull: false,
-    field: 'payment_method'
+    type: String,
+    enum: ['cod', 'upi', 'razorpay'],
+    default: 'cod',
+    required: true
   },
   rejectionReason: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    field: 'rejection_reason'
+    type: String,
+    default: null
   }
 }, {
   timestamps: true,
-  underscored: true
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
 
+orderSchema.virtual('user', {
+  ref: 'User',
+  localField: 'userId',
+  foreignField: '_id',
+  justOne: true
+});
+
+orderSchema.virtual('address', {
+  ref: 'Address',
+  localField: 'addressId',
+  foreignField: '_id',
+  justOne: true
+});
+
+orderSchema.virtual('items', {
+  ref: 'OrderItem',
+  localField: '_id',
+  foreignField: 'orderId'
+});
+
+orderSchema.virtual('payments', {
+  ref: 'Payment',
+  localField: '_id',
+  foreignField: 'orderId'
+});
+
+const Order = mongoose.model('Order', orderSchema);
 module.exports = Order;

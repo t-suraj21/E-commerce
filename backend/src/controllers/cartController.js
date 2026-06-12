@@ -40,16 +40,21 @@ const calculateWeightPrice = (product, basePrice, weight) => {
 // @access  Private (Customer)
 const getCart = async (req, res) => {
   try {
-    const cartItems = await CartItem.findAll({
-      where: { userId: req.user.id },
-      include: [{
-        model: Product,
-        as: 'product',
-        attributes: ['id', 'name', 'price', 'unit', 'imageUrl', 'stockQuantity', 'isActive']
-      }]
-    });
+    const cartItems = await CartItem.find({ userId: req.user.id })
+      .populate({
+        path: 'productId',
+        select: 'id name price unit imageUrl stockQuantity isActive',
+        // In virtuals setup, it maps productId to product, so populating 'productId' is correct
+      });
+    
+    // To match Sequelize's output format where product object is inside 'product' field:
+    // since we set a virtual for 'product' in CartItem.js that references 'productId',
+    // populating 'productId' works, but populating 'product' directly via virtual is cleaner!
+    // Let's populate 'product':
+    const populatedCart = await CartItem.find({ userId: req.user.id })
+      .populate('product');
 
-    res.json({ success: true, count: cartItems.length, cartItems });
+    res.json({ success: true, count: populatedCart.length, cartItems: populatedCart });
   } catch (error) {
     console.error('Get cart error:', error);
     res.status(500).json({ success: false, message: 'Server error fetching cart' });
@@ -70,14 +75,16 @@ const addToCart = async (req, res) => {
     }
 
     // Verify product exists and has stock
-    const product = await Product.findByPk(productId);
+    const product = await Product.findById(productId);
     if (!product || !product.isActive) {
       return res.status(404).json({ success: false, message: 'Product not found or inactive' });
     }
 
     // Check if item already in cart with same weight
     let cartItem = await CartItem.findOne({
-      where: { userId: req.user.id, productId, weight: selectedWeight }
+      userId: req.user.id,
+      productId,
+      weight: selectedWeight
     });
 
     if (cartItem) {
@@ -108,9 +115,8 @@ const addToCart = async (req, res) => {
     }
 
     // Fetch updated cart item with product details
-    const updatedItem = await CartItem.findByPk(cartItem.id, {
-      include: [{ model: Product, as: 'product' }]
-    });
+    const updatedItem = await CartItem.findById(cartItem.id)
+      .populate('product');
 
     res.json({ success: true, cartItem: updatedItem });
   } catch (error) {
@@ -132,7 +138,7 @@ const updateCartQuantity = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Quantity must be 1 or more' });
     }
 
-    const product = await Product.findByPk(productId);
+    const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -145,7 +151,9 @@ const updateCartQuantity = async (req, res) => {
     }
 
     const cartItem = await CartItem.findOne({
-      where: { userId: req.user.id, productId, weight: selectedWeight }
+      userId: req.user.id,
+      productId,
+      weight: selectedWeight
     });
 
     if (!cartItem) {
@@ -155,9 +163,8 @@ const updateCartQuantity = async (req, res) => {
     cartItem.quantity = quantity;
     await cartItem.save();
 
-    const updatedItem = await CartItem.findByPk(cartItem.id, {
-      include: [{ model: Product, as: 'product' }]
-    });
+    const updatedItem = await CartItem.findById(cartItem.id)
+      .populate('product');
 
     res.json({ success: true, cartItem: updatedItem });
   } catch (error) {
@@ -172,11 +179,13 @@ const updateCartQuantity = async (req, res) => {
 const removeFromCart = async (req, res) => {
   try {
     const selectedWeight = req.body?.weight || req.query?.weight || '1kg';
-    const deletedCount = await CartItem.destroy({
-      where: { userId: req.user.id, productId: req.params.productId, weight: selectedWeight }
+    const result = await CartItem.deleteOne({
+      userId: req.user.id,
+      productId: req.params.productId,
+      weight: selectedWeight
     });
 
-    if (deletedCount === 0) {
+    if (result.deletedCount === 0) {
       return res.status(404).json({ success: false, message: 'Item not found in cart' });
     }
 
@@ -192,7 +201,7 @@ const removeFromCart = async (req, res) => {
 // @access  Private (Customer)
 const clearCart = async (req, res) => {
   try {
-    await CartItem.destroy({ where: { userId: req.user.id } });
+    await CartItem.deleteMany({ userId: req.user.id });
     res.json({ success: true, message: 'Cart cleared successfully' });
   } catch (error) {
     console.error('Clear cart error:', error);
@@ -214,10 +223,8 @@ const applyCoupon = async (req, res) => {
     const code = couponCode.toUpperCase().trim();
 
     // 1. Fetch user cart to calculate subtotal
-    const cartItems = await CartItem.findAll({
-      where: { userId: req.user.id },
-      include: [{ model: Product, as: 'product' }]
-    });
+    const cartItems = await CartItem.find({ userId: req.user.id })
+      .populate('product');
 
     if (!cartItems || cartItems.length === 0) {
       return res.status(400).json({ success: false, message: 'Cannot apply coupon to an empty cart' });
@@ -241,7 +248,7 @@ const applyCoupon = async (req, res) => {
     let message = '';
 
     // 2. Fetch coupon from database
-    const coupon = await Coupon.findOne({ where: { code } });
+    const coupon = await Coupon.findOne({ code });
     if (!coupon || !coupon.isActive || new Date(coupon.expirationDate) < new Date()) {
       return res.status(400).json({ success: false, message: 'Invalid or expired coupon code' });
     }

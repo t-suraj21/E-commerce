@@ -1,6 +1,4 @@
 const { Order, OrderItem, Product, User, Category } = require('../models');
-const { sequelize } = require('../config/db');
-const { Op } = require('sequelize');
 
 // Helper to get formatting for dates
 const getStartOfDay = (date) => {
@@ -16,34 +14,35 @@ const getDashboardStats = async (req, res) => {
   try {
     // 1. Core KPIs
     // Total Sales & Total Orders (all active non-cancelled)
-    const salesData = await Order.findAll({
-      where: { status: { [Op.ne]: 'cancelled' } },
-      attributes: [
-        [sequelize.fn('SUM', sequelize.col('total_price')), 'totalSales'],
-        [sequelize.fn('COUNT', sequelize.col('id')), 'totalOrders']
-      ],
-      raw: true
-    });
+    const salesData = await Order.aggregate([
+      { $match: { status: { $ne: 'cancelled' } } },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: '$totalPrice' },
+          totalOrders: { $sum: 1 }
+        }
+      }
+    ]);
 
-    const totalSales = parseFloat(salesData[0].totalSales || 0);
-    const totalOrders = parseInt(salesData[0].totalOrders || 0, 10);
+    const totalSales = salesData.length > 0 ? parseFloat(salesData[0].totalSales || 0) : 0;
+    const totalOrders = salesData.length > 0 ? parseInt(salesData[0].totalOrders || 0, 10) : 0;
 
     // Total Customers Count
-    const customerCount = await User.count({
-      where: { role: 'customer' }
-    });
+    const customerCount = await User.countDocuments({ role: 'customer' });
 
     // Pending Orders Count
-    const pendingOrdersCount = await Order.count({
-      where: { status: 'pending' }
-    });
+    const pendingOrdersCount = await Order.countDocuments({ status: 'pending' });
 
     // 2. Order status breakdown
-    const statusCounts = await Order.findAll({
-      attributes: ['status', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
-      group: ['status'],
-      raw: true
-    });
+    const statusCounts = await Order.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
     const statusMap = {
       pending: 0,
       accepted: 0,
@@ -53,69 +52,58 @@ const getDashboardStats = async (req, res) => {
       cancelled: 0
     };
     statusCounts.forEach(item => {
-      statusMap[item.status] = parseInt(item.count || 0, 10);
+      if (statusMap[item._id] !== undefined) {
+        statusMap[item._id] = item.count;
+      }
     });
 
     // 3. Detailed Inventory Status
-    const totalProductsCount = await Product.count();
-    const outOfStockCount = await Product.count({ where: { stockQuantity: 0 } });
-    const lowStockCount = await Product.count({
-      where: {
-        stockQuantity: {
-          [Op.gt]: 0,
-          [Op.lt]: 10
-        }
-      }
+    const totalProductsCount = await Product.countDocuments();
+    const outOfStockCount = await Product.countDocuments({ stockQuantity: 0 });
+    const lowStockCount = await Product.countDocuments({
+      stockQuantity: { $gt: 0, $lt: 10 }
     });
     const inStockCount = totalProductsCount - outOfStockCount - lowStockCount;
 
     // Get list of low stock items
-    const lowStockItems = await Product.findAll({
-      where: { stockQuantity: { [Op.lt]: 10 } },
-      attributes: ['id', 'name', 'stockQuantity', 'price', 'unit'],
-      order: [['stockQuantity', 'ASC']],
-      limit: 10
-    });
+    const lowStockItems = await Product.find({ stockQuantity: { $lt: 10 } })
+      .select('id name stockQuantity price unit')
+      .sort({ stockQuantity: 1 })
+      .limit(10);
 
     // 4. Sales Report Analytics
     // Average Order Value (AOV)
     const averageOrderValue = totalOrders > 0 ? parseFloat((totalSales / totalOrders).toFixed(2)) : 0;
 
     // 5. Payment Method Analytics
-    const paymentMethodStats = await Order.findAll({
-      where: { status: { [Op.ne]: 'cancelled' } },
-      attributes: [
-        'paymentMethod',
-        [sequelize.fn('SUM', sequelize.col('total_price')), 'revenue'],
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
-      ],
-      group: ['paymentMethod'],
-      raw: true
-    });
+    const paymentMethodStats = await Order.aggregate([
+      { $match: { status: { $ne: 'cancelled' } } },
+      {
+        $group: {
+          _id: '$paymentMethod',
+          revenue: { $sum: '$totalPrice' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
 
     // 6. Category-wise Sales Reports
-    // Fetch order items to calculate category sales (handles database differences gracefully)
-    const orderItems = await OrderItem.findAll({
-      include: [
-        {
-          model: Order,
-          as: 'order',
-          where: { status: { [Op.ne]: 'cancelled' } },
-          attributes: []
-        },
-        {
-          model: Product,
-          as: 'product',
-          attributes: ['id', 'name', 'categoryId'],
-          include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }]
+    // Fetch order items to calculate category sales (populated properly)
+    const orderItems = await OrderItem.find()
+      .populate('orderId')
+      .populate({
+        path: 'productId',
+        populate: {
+          path: 'categoryId'
         }
-      ]
-    });
+      });
 
     const categorySalesMap = {};
     orderItems.forEach(item => {
-      if (item.product) {
-        const categoryName = item.product.category ? item.product.category.name : 'Grocery';
+      const order = item.orderId;
+      const product = item.productId;
+      if (order && order.status !== 'cancelled' && product) {
+        const categoryName = (product.categoryId && product.categoryId.name) ? product.categoryId.name : 'Grocery';
         const revenue = parseFloat(item.price) * item.quantity;
         const qty = item.quantity;
 
@@ -134,26 +122,29 @@ const getDashboardStats = async (req, res) => {
     })).sort((a, b) => b.revenue - a.revenue);
 
     // 7. Recent orders (latest 10)
-    const recentOrders = await Order.findAll({
-      limit: 10,
-      order: [['createdAt', 'DESC']],
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] }
-      ]
+    const recentOrders = await Order.find()
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate('userId', 'id name email phone');
+
+    // Make sure 'userId' populates properly as 'user' to maintain response compatibility
+    const formattedRecentOrders = recentOrders.map(order => {
+      const orderJSON = order.toJSON();
+      if (orderJSON.userId) {
+        orderJSON.user = orderJSON.userId;
+        delete orderJSON.userId;
+      }
+      return orderJSON;
     });
 
     // 8. Generate Charts Data (Daily, Weekly, Monthly)
-    // Fetch all active orders in the last 12 months for grouping
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     
-    const chartOrders = await Order.findAll({
-      where: {
-        status: { [Op.ne]: 'cancelled' },
-        createdAt: { [Op.gte]: oneYearAgo }
-      },
-      order: [['createdAt', 'ASC']]
-    });
+    const chartOrders = await Order.find({
+      status: { $ne: 'cancelled' },
+      createdAt: { $gte: oneYearAgo }
+    }).sort({ createdAt: 1 });
 
     // Daily Sales (Last 7 Days)
     const dailyData = {};
@@ -171,7 +162,6 @@ const getDashboardStats = async (req, res) => {
       const date = new Date();
       date.setDate(date.getDate() - (i * 7));
       const label = `Wk -${i}`;
-      // Calculate start and end date boundaries for this week grouping
       const start = getStartOfDay(new Date(date.getTime() - 6 * 24 * 60 * 60 * 1000));
       const end = new Date(date);
       end.setHours(23, 59, 59, 999);
@@ -191,7 +181,6 @@ const getDashboardStats = async (req, res) => {
       monthsOrder.push(key);
     }
 
-    // Distribute order calculations in memory (database dialect agnostic)
     chartOrders.forEach(order => {
       const orderDate = new Date(order.createdAt);
       const orderValue = parseFloat(order.totalPrice);
@@ -256,12 +245,12 @@ const getDashboardStats = async (req, res) => {
         },
         lowStockItems: lowStockItems,
         paymentStats: paymentMethodStats.map(item => ({
-          paymentMethod: item.paymentMethod || 'Unknown',
+          paymentMethod: item._id || 'Unknown',
           revenue: parseFloat(parseFloat(item.revenue || 0).toFixed(2)),
           count: parseInt(item.count || 0, 10)
         })),
         categorySales: categorySalesReport,
-        recentOrders,
+        recentOrders: formattedRecentOrders,
         charts: {
           daily: dailyChart,
           weekly: weeklyChart,
@@ -280,11 +269,9 @@ const getDashboardStats = async (req, res) => {
 // @access  Private (Admin)
 const getCustomers = async (req, res) => {
   try {
-    const customers = await User.findAll({
-      where: { role: 'customer' },
-      attributes: ['id', 'name', 'email', 'phone', 'createdAt'],
-      order: [['createdAt', 'DESC']]
-    });
+    const customers = await User.find({ role: 'customer' })
+      .select('id name email phone createdAt')
+      .sort({ createdAt: -1 });
     
     res.json({
       success: true,

@@ -5,10 +5,8 @@ const { Address } = require('../models');
 // @access  Private (Customer)
 const getAddresses = async (req, res) => {
   try {
-    const addresses = await Address.findAll({
-      where: { userId: req.user.id },
-      order: [['isDefault', 'DESC'], ['createdAt', 'DESC']]
-    });
+    const addresses = await Address.find({ userId: req.user.id })
+      .sort({ isDefault: -1, createdAt: -1 });
     res.json({ success: true, count: addresses.length, addresses });
   } catch (error) {
     console.error('Get addresses error:', error);
@@ -29,9 +27,9 @@ const createAddress = async (req, res) => {
 
     // If making this default, unset previous default address
     if (isDefault) {
-      await Address.update(
-        { isDefault: false },
-        { where: { userId: req.user.id } }
+      await Address.updateMany(
+        { userId: req.user.id },
+        { $set: { isDefault: false } }
       );
     }
 
@@ -62,7 +60,8 @@ const updateAddress = async (req, res) => {
   try {
     const { fullName, mobile, houseNumber, street, landmark, city, state, pincode, isDefault } = req.body;
     const address = await Address.findOne({
-      where: { id: req.params.id, userId: req.user.id }
+      _id: req.params.id,
+      userId: req.user.id
     });
 
     if (!address) {
@@ -71,23 +70,23 @@ const updateAddress = async (req, res) => {
 
     if (isDefault) {
       // Unset other default addresses
-      await Address.update(
-        { isDefault: false },
-        { where: { userId: req.user.id } }
+      await Address.updateMany(
+        { userId: req.user.id },
+        { $set: { isDefault: false } }
       );
     }
 
-    await address.update({
-      fullName: fullName !== undefined ? fullName : address.fullName,
-      mobile: mobile !== undefined ? mobile : address.mobile,
-      houseNumber: houseNumber !== undefined ? houseNumber : address.houseNumber,
-      street: street !== undefined ? street : address.street,
-      landmark: landmark !== undefined ? landmark : address.landmark,
-      city: city !== undefined ? city : address.city,
-      state: state !== undefined ? state : address.state,
-      pincode: pincode !== undefined ? pincode : address.pincode,
-      isDefault: isDefault !== undefined ? isDefault : address.isDefault
-    });
+    address.fullName = fullName !== undefined ? fullName : address.fullName;
+    address.mobile = mobile !== undefined ? mobile : address.mobile;
+    address.houseNumber = houseNumber !== undefined ? houseNumber : address.houseNumber;
+    address.street = street !== undefined ? street : address.street;
+    address.landmark = landmark !== undefined ? landmark : address.landmark;
+    address.city = city !== undefined ? city : address.city;
+    address.state = state !== undefined ? state : address.state;
+    address.pincode = pincode !== undefined ? pincode : address.pincode;
+    address.isDefault = isDefault !== undefined ? isDefault : address.isDefault;
+
+    await address.save();
 
     res.json({ success: true, address });
   } catch (error) {
@@ -102,14 +101,15 @@ const updateAddress = async (req, res) => {
 const deleteAddress = async (req, res) => {
   try {
     const address = await Address.findOne({
-      where: { id: req.params.id, userId: req.user.id }
+      _id: req.params.id,
+      userId: req.user.id
     });
 
     if (!address) {
       return res.status(404).json({ success: false, message: 'Address not found' });
     }
 
-    await address.destroy();
+    await address.deleteOne();
     res.json({ success: true, message: 'Address deleted successfully' });
   } catch (error) {
     console.error('Delete address error:', error);

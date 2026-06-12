@@ -1,10 +1,8 @@
 const { Product, Category, OrderItem, CartItem } = require('../models');
 const cacheService = require('../services/cacheService');
-const { Op } = require('sequelize');
-const { sequelize } = require('../config/db');
 const { sendBroadcastNotification } = require('../services/notificationService');
 
-// @desc    Get all products (with category filter and search search query)
+// @desc    Get all products (with category filter and search query)
 // @route   GET /api/products
 // @access  Public
 const getProducts = async (req, res) => {
@@ -30,22 +28,21 @@ const getProducts = async (req, res) => {
     }
 
     if (search) {
-      whereClause[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { description: { [Op.like]: `%${search}%` } }
+      whereClause.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
       ];
     }
 
     const limitVal = limit ? parseInt(limit, 10) : 100;
     const offsetVal = offset ? parseInt(offset, 10) : 0;
 
-    const { count, rows: products } = await Product.findAndCountAll({
-      where: whereClause,
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
-      limit: limitVal,
-      offset: offsetVal,
-      order: [['name', 'ASC']]
-    });
+    const count = await Product.countDocuments(whereClause);
+    const products = await Product.find(whereClause)
+      .populate('category', 'id name')
+      .sort({ name: 1 })
+      .skip(offsetVal)
+      .limit(limitVal);
 
     // Save to Cache (5 mins TTL)
     cacheService.set(cacheKey, { totalCount: count, products }, 300);
@@ -73,9 +70,8 @@ const getProductById = async (req, res) => {
       return res.json({ success: true, product: cached });
     }
 
-    const product = await Product.findByPk(req.params.id, {
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }]
-    });
+    const product = await Product.findById(req.params.id)
+      .populate('category', 'id name');
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
@@ -115,7 +111,7 @@ const createProduct = async (req, res) => {
 
     // Verify category exists
     if (categoryId) {
-      const category = await Category.findByPk(categoryId);
+      const category = await Category.findById(categoryId);
       if (!category) {
         return res.status(400).json({ success: false, message: 'Invalid category ID' });
       }
@@ -124,7 +120,7 @@ const createProduct = async (req, res) => {
     const isActiveBool = isActive === 'true' || isActive === true || isActive === undefined;
 
     const product = await Product.create({
-      categoryId,
+      categoryId: categoryId || null,
       name,
       description,
       price: parseFloat(price),
@@ -161,7 +157,7 @@ const updateProduct = async (req, res) => {
       } catch(e) {}
     }
 
-    const product = await Product.findByPk(req.params.id);
+    const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
@@ -184,7 +180,7 @@ const updateProduct = async (req, res) => {
     }
 
     if (categoryId) {
-      const category = await Category.findByPk(categoryId);
+      const category = await Category.findById(categoryId);
       if (!category) {
         return res.status(400).json({ success: false, message: 'Invalid category ID' });
       }
@@ -193,22 +189,22 @@ const updateProduct = async (req, res) => {
     const oldDiscount = product.discountPercent || 0;
     const newDiscount = discountPercent !== undefined ? parseInt(discountPercent, 10) : oldDiscount;
 
-    await product.update({
-      categoryId,
-      name,
-      description,
-      price: price ? parseFloat(price) : product.price,
-      discountPrice: discountPrice ? parseFloat(discountPrice) : product.discountPrice,
-      stockQuantity: stockQuantity ? parseInt(stockQuantity, 10) : product.stockQuantity,
-      unit: unit || product.unit,
-      imageUrl,
-      images,
-      isActive: isActive !== undefined ? (isActive === 'true' || isActive === true) : product.isActive,
-      discountPercent: newDiscount,
-      isTodayDeal: isTodayDeal !== undefined ? (isTodayDeal === 'true' || isTodayDeal === true) : product.isTodayDeal,
-      isBestSeller: isBestSeller !== undefined ? (isBestSeller === 'true' || isBestSeller === true) : product.isBestSeller,
-      isNewArrival: isNewArrival !== undefined ? (isNewArrival === 'true' || isNewArrival === true) : product.isNewArrival
-    });
+    product.categoryId = categoryId !== undefined ? (categoryId || null) : product.categoryId;
+    product.name = name !== undefined ? name : product.name;
+    product.description = description !== undefined ? description : product.description;
+    product.price = price !== undefined ? parseFloat(price) : product.price;
+    product.discountPrice = discountPrice !== undefined ? (discountPrice ? parseFloat(discountPrice) : null) : product.discountPrice;
+    product.stockQuantity = stockQuantity !== undefined ? parseInt(stockQuantity, 10) : product.stockQuantity;
+    product.unit = unit !== undefined ? unit : product.unit;
+    product.imageUrl = imageUrl;
+    product.images = images;
+    product.isActive = isActive !== undefined ? (isActive === 'true' || isActive === true) : product.isActive;
+    product.discountPercent = newDiscount;
+    product.isTodayDeal = isTodayDeal !== undefined ? (isTodayDeal === 'true' || isTodayDeal === true) : product.isTodayDeal;
+    product.isBestSeller = isBestSeller !== undefined ? (isBestSeller === 'true' || isBestSeller === true) : product.isBestSeller;
+    product.isNewArrival = isNewArrival !== undefined ? (isNewArrival === 'true' || isNewArrival === true) : product.isNewArrival;
+
+    await product.save();
 
     // Broadcast offer to all users if a discount is added or increased
     if (newDiscount > oldDiscount && newDiscount > 0) {
@@ -219,9 +215,8 @@ const updateProduct = async (req, res) => {
       ).catch(err => console.error('Error sending offer broadcast notification:', err));
     }
 
-    const updatedProduct = await Product.findByPk(req.params.id, {
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }]
-    });
+    const updatedProduct = await Product.findById(req.params.id)
+      .populate('category', 'id name');
 
     // Invalidate Cache
     cacheService.clearPattern('products:');
@@ -239,21 +234,21 @@ const updateProduct = async (req, res) => {
 // @access  Private (Admin)
 const deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findByPk(req.params.id);
+    const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    // Handle foreign key constraints manually to prevent SQLite RESTRICT errors
+    // Handle references manually
     if (OrderItem) {
-      await OrderItem.update({ productId: null }, { where: { productId: product.id } });
+      await OrderItem.updateMany({ productId: product._id }, { $set: { productId: null } });
     }
     if (CartItem) {
-      await CartItem.destroy({ where: { productId: product.id } });
+      await CartItem.deleteMany({ productId: product._id });
     }
 
-    await product.destroy();
+    await product.deleteOne();
     
     // Invalidate Cache
     cacheService.clearPattern('products:');
@@ -278,38 +273,42 @@ const getHomeFeed = async (req, res) => {
     }
 
     // Fetch categories
-    const categories = await Category.findAll({ order: [['name', 'ASC']] });
+    const categories = await Category.find().sort({ name: 1 });
 
     // Fetch Today's Deals
-    const todayDeals = await Product.findAll({
-      where: { isTodayDeal: true, isActive: true },
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
-      order: [['name', 'ASC']],
-      limit: 10
-    });
+    const todayDeals = await Product.find({ isTodayDeal: true, isActive: true })
+      .populate('category', 'id name')
+      .sort({ name: 1 })
+      .limit(10);
 
     // Fetch Best Sellers
-    const bestSellers = await Product.findAll({
-      where: { isBestSeller: true, isActive: true },
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
-      order: [['name', 'ASC']],
-      limit: 10
-    });
+    const bestSellers = await Product.find({ isBestSeller: true, isActive: true })
+      .populate('category', 'id name')
+      .sort({ name: 1 })
+      .limit(10);
 
     // Fetch New Arrivals
-    const newArrivals = await Product.findAll({
-      where: { isNewArrival: true, isActive: true },
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
-      order: [['createdAt', 'DESC']],
-      limit: 10
-    });
+    const newArrivals = await Product.find({ isNewArrival: true, isActive: true })
+      .populate('category', 'id name')
+      .sort({ createdAt: -1 })
+      .limit(10);
 
     // Fetch Recommended
-    const recommended = await Product.findAll({
-      where: { isActive: true },
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
-      order: [sequelize.random()],
-      limit: 10
+    const recommended = await Product.aggregate([
+      { $match: { isActive: true } },
+      { $sample: { size: 10 } }
+    ]);
+    
+    const populatedRecommended = await Product.populate(recommended, { path: 'category', select: 'id name' });
+    
+    // Format populated recommended docs to include virtual id to preserve backward compatibility
+    const formattedRecommended = populatedRecommended.map(doc => {
+      doc.id = doc._id.toString();
+      // Ensure populated category has 'id' field as well
+      if (doc.category && doc.category._id) {
+        doc.category.id = doc.category._id.toString();
+      }
+      return doc;
     });
 
     const feedData = {
@@ -318,7 +317,7 @@ const getHomeFeed = async (req, res) => {
         todayDeals,
         bestSellers,
         newArrivals,
-        recommended
+        recommended: formattedRecommended
       }
     };
     cacheService.set('products:home', feedData, 600); // 10 minutes cache

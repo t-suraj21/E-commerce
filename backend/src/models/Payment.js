@@ -1,52 +1,79 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Payment = sequelize.define('Payment', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true
+const paymentSchema = new mongoose.Schema({
+  orderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Order',
+    required: true
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
   method: {
-    type: DataTypes.ENUM('cod', 'upi', 'razorpay'),
-    allowNull: false,
-    defaultValue: 'cod'
+    type: String,
+    enum: ['cod', 'upi', 'razorpay'],
+    default: 'cod',
+    required: true
   },
   amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
+    type: Number,
+    required: true
   },
   status: {
-    type: DataTypes.ENUM('pending', 'success', 'failed'),
-    allowNull: false,
-    defaultValue: 'pending'
+    type: String,
+    enum: ['pending', 'success', 'failed'],
+    default: 'pending',
+    required: true
   },
   transactionId: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    field: 'transaction_id'
+    type: String,
+    default: null
   },
   failureReason: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    field: 'failure_reason'
+    type: String,
+    default: null
   },
   paidAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    field: 'paid_at'
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true,
-  underscored: true,
-  indexes: [
-    {
-      fields: ['order_id']
-    },
-    {
-      fields: ['user_id']
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
     }
-  ]
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  }
 });
 
+paymentSchema.virtual('order', {
+  ref: 'Order',
+  localField: 'orderId',
+  foreignField: '_id',
+  justOne: true
+});
+
+paymentSchema.virtual('user', {
+  ref: 'User',
+  localField: 'userId',
+  foreignField: '_id',
+  justOne: true
+});
+
+const Payment = mongoose.model('Payment', paymentSchema);
 module.exports = Payment;

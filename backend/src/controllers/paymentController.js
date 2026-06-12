@@ -1,5 +1,5 @@
+const mongoose = require('mongoose');
 const { Payment, Order, User } = require('../models');
-const { sequelize } = require('../config/db');
 
 // @desc    Initiate a payment transaction for an order
 // @route   POST /api/payments/initiate
@@ -14,7 +14,8 @@ const initiatePayment = async (req, res) => {
 
     // Verify order belongs to the user
     const order = await Order.findOne({
-      where: { id: orderId, userId: req.user.id }
+      _id: orderId,
+      userId: req.user.id
     });
 
     if (!order) {
@@ -23,7 +24,8 @@ const initiatePayment = async (req, res) => {
 
     // Check if there is already a successful payment for this order
     const existingSuccess = await Payment.findOne({
-      where: { orderId, status: 'success' }
+      orderId,
+      status: 'success'
     });
     if (existingSuccess) {
       return res.status(400).json({ success: false, message: 'This order has already been paid for' });
@@ -57,71 +59,59 @@ const initiatePayment = async (req, res) => {
 // @route   POST /api/payments/verify
 // @access  Private (Customer)
 const verifyPayment = async (req, res) => {
-  const transaction = await sequelize.transaction();
   try {
     const { paymentId, status, failureReason } = req.body;
 
     if (!paymentId || !status) {
-      await transaction.rollback();
       return res.status(400).json({ success: false, message: 'Please provide paymentId and status' });
     }
 
     const payment = await Payment.findOne({
-      where: { id: paymentId, userId: req.user.id },
-      transaction
+      _id: paymentId,
+      userId: req.user.id
     });
 
     if (!payment) {
-      await transaction.rollback();
       return res.status(404).json({ success: false, message: 'Payment record not found' });
     }
 
     if (payment.status !== 'pending') {
-      await transaction.rollback();
       return res.status(400).json({ success: false, message: `Payment is already processed with status: ${payment.status}` });
     }
 
     const order = await Order.findOne({
-      where: { id: payment.orderId, userId: req.user.id },
-      transaction
+      _id: payment.orderId,
+      userId: req.user.id
     });
 
     if (!order) {
-      await transaction.rollback();
       return res.status(404).json({ success: false, message: 'Associated order not found' });
     }
 
     if (status === 'success') {
       // Update payment record
-      await payment.update({
-        status: 'success',
-        paidAt: new Date()
-      }, { transaction });
+      payment.status = 'success';
+      payment.paidAt = new Date();
+      await payment.save();
 
       // Update order status
-      await order.update({
-        paymentStatus: 'paid',
-        status: 'accepted'
-      }, { transaction });
+      order.paymentStatus = 'paid';
+      order.status = 'accepted';
+      await order.save();
     } else {
       // Update payment record as failed
-      await payment.update({
-        status: 'failed',
-        failureReason: failureReason || 'Simulated transaction failed'
-      }, { transaction });
+      payment.status = 'failed';
+      payment.failureReason = failureReason || 'Simulated transaction failed';
+      await payment.save();
 
       // Update order paymentStatus
-      await order.update({
-        paymentStatus: 'failed'
-      }, { transaction });
+      order.paymentStatus = 'failed';
+      await order.save();
     }
 
-    await transaction.commit();
-
     // Fetch updated payment with order
-    const updatedPayment = await Payment.findByPk(paymentId, {
-      include: [{ model: Order, as: 'order' }]
-    });
+    const updatedPayment = await Payment.findById(paymentId)
+      .populate('order');
 
     res.json({
       success: true,
@@ -129,7 +119,6 @@ const verifyPayment = async (req, res) => {
       payment: updatedPayment
     });
   } catch (error) {
-    await transaction.rollback();
     console.error('Verify payment error:', error);
     res.status(500).json({ success: false, message: 'Server error verifying payment' });
   }
@@ -147,7 +136,8 @@ const retryPayment = async (req, res) => {
     }
 
     const order = await Order.findOne({
-      where: { id: orderId, userId: req.user.id }
+      _id: orderId,
+      userId: req.user.id
     });
 
     if (!order) {
@@ -163,7 +153,7 @@ const retryPayment = async (req, res) => {
     const transactionId = `TKS-TXN-${method.toUpperCase()}-${randomSuffix}`;
 
     const payment = await Payment.create({
-      orderId: order.id,
+      orderId: order._id,
       userId: req.user.id,
       method,
       amount: order.totalPrice,
@@ -172,7 +162,8 @@ const retryPayment = async (req, res) => {
     });
 
     // Also update order's paymentMethod to the newly selected one
-    await order.update({ paymentMethod: method });
+    order.paymentMethod = method;
+    await order.save();
 
     res.status(201).json({
       success: true,
@@ -196,14 +187,10 @@ const getTransactionHistory = async (req, res) => {
       whereClause.userId = req.user.id;
     }
 
-    const payments = await Payment.findAll({
-      where: whereClause,
-      include: [
-        { model: Order, as: 'order', attributes: ['id', 'totalPrice', 'status', 'createdAt'] },
-        { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
+    const payments = await Payment.find(whereClause)
+      .populate('order', 'id totalPrice status createdAt')
+      .populate('user', 'id name email phone')
+      .sort({ createdAt: -1 });
 
     res.json({
       success: true,
@@ -223,18 +210,16 @@ const getPaymentByOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
 
-    const order = await Order.findOne({
-      where: req.user.role === 'customer' ? { id: orderId, userId: req.user.id } : { id: orderId }
-    });
+    const order = await Order.findOne(
+      req.user.role === 'customer' ? { _id: orderId, userId: req.user.id } : { _id: orderId }
+    );
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const payments = await Payment.findAll({
-      where: { orderId },
-      order: [['createdAt', 'DESC']]
-    });
+    const payments = await Payment.find({ orderId })
+      .sort({ createdAt: -1 });
 
     res.json({
       success: true,

@@ -1,5 +1,5 @@
 const app = require('./app');
-const { connectDB, sequelize } = require('./config/db');
+const { connectDB } = require('./config/db');
 const { execSync } = require('child_process');
 
 const PORT = process.env.PORT || 8001;
@@ -41,16 +41,38 @@ const startListening = () => {
   });
 };
 
+const seedAdmin = async () => {
+  try {
+    const { User } = require('./models');
+    const adminEmail = 'tarunkumar@gmail.com';
+    const adminUser = await User.findOne({ email: adminEmail });
+    if (!adminUser) {
+      console.log('🔄 Seeding default Admin user...');
+      await User.create({
+        name: 'Admin Tarun',
+        email: 'tarunkumar@gmail.com',
+        password: '@211227tks',
+        role: 'admin',
+        phone: '9999999999'
+      });
+      console.log('✅ Default Admin user seeded successfully.');
+    } else {
+      console.log('ℹ️ Admin user already exists.');
+    }
+  } catch (err) {
+    console.error('❌ Error seeding Admin user:', err.message);
+  }
+};
+
 const startServer = async () => {
   try {
     // 1. Establish Database Connection
     await connectDB();
 
-    // 2. Sync Models
-    await sequelize.sync();
-    console.log('Database synced successfully.');
+    // 1.1 Seed Admin User
+    await seedAdmin();
 
-    // 3. Start Listening
+    // 2. Start Listening
     startListening();
   } catch (error) {
     console.error('Failed to start server:', error);
