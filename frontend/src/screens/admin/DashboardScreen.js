@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  FlatList
+  FlatList,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, SIZES, SHADOWS } from '../../styles/theme';
@@ -28,11 +29,31 @@ export default function DashboardScreen({ navigation }) {
   // Detailed report tab state: 'category' | 'payments' | 'lowStock'
   const [reportTab, setReportTab] = useState('category');
 
+  // Customers list popup modal state
+  const [isCustomersModalVisible, setIsCustomersModalVisible] = useState(false);
+  const [customers, setCustomers] = useState([]);
+  const [isFetchingCustomers, setIsFetchingCustomers] = useState(false);
+
   const { t, locale } = useContext(LanguageContext);
   const { theme, isDarkMode } = useContext(ThemeContext);
   const { unreadCount } = useContext(NotificationContext);
 
   const styles = getStyles(theme);
+
+  const handleViewCustomers = async () => {
+    setIsCustomersModalVisible(true);
+    setIsFetchingCustomers(true);
+    try {
+      const response = await apiClient.get('/dashboard/customers');
+      if (response.data.success) {
+        setCustomers(response.data.customers);
+      }
+    } catch (error) {
+      console.log('Error fetching customers list:', error.message);
+    } finally {
+      setIsFetchingCustomers(false);
+    }
+  };
 
   useEffect(() => {
     fetchStats();
@@ -67,18 +88,26 @@ export default function DashboardScreen({ navigation }) {
   }
 
   // Helper to render metric cards
-  const renderMetricCard = (icon, title, value, color, subtitle = '') => (
-    <View style={styles.metricCard}>
-      <View style={[styles.iconContainer, { backgroundColor: `${color}15` }]}>
-        <Ionicons name={icon} size={22} color={color} />
-      </View>
-      <View style={styles.metricDetails}>
-        <Text style={styles.metricLabel}>{title}</Text>
-        <Text style={styles.metricValue}>{value}</Text>
-        {subtitle ? <Text style={styles.metricSubtitle}>{subtitle}</Text> : null}
-      </View>
-    </View>
-  );
+  const renderMetricCard = (icon, title, value, color, subtitle = '', onPress = null) => {
+    const CardComponent = onPress ? TouchableOpacity : View;
+    return (
+      <CardComponent 
+        style={styles.metricCard} 
+        onPress={onPress}
+        disabled={!onPress}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: `${color}15` }]}>
+          <Ionicons name={icon} size={22} color={color} />
+        </View>
+        <View style={styles.metricDetails}>
+          <Text style={styles.metricLabel}>{title}</Text>
+          <Text style={styles.metricValue}>{value}</Text>
+          {subtitle ? <Text style={styles.metricSubtitle}>{subtitle}</Text> : null}
+        </View>
+      </CardComponent>
+    );
+  };
 
   // Modern Horizontal Bar Chart Render Function
   const renderSalesChart = () => {
@@ -295,7 +324,9 @@ export default function DashboardScreen({ navigation }) {
             'people-outline', 
             locale === 'en' ? 'Customers' : 'ग्राहक संख्या', 
             stats.kpis?.totalCustomers || 0, 
-            '#00B0FF'
+            '#00B0FF',
+            '',
+            handleViewCustomers
           )}
           {renderMetricCard(
             'warning-outline', 
@@ -389,9 +420,55 @@ export default function DashboardScreen({ navigation }) {
                 </View>
               );
             })}
-          </View>
         )}
       </View>
+
+      {/* Customers Modal (View Names Only) */}
+      <Modal
+        visible={isCustomersModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setIsCustomersModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {locale === 'en' ? 'Registered Customers' : 'पंजीकृत ग्राहक'} ({customers.length})
+              </Text>
+              <TouchableOpacity onPress={() => setIsCustomersModalVisible(false)}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            {isFetchingCustomers ? (
+              <ActivityIndicator size="large" color={theme.primary} style={styles.modalLoader} />
+            ) : customers.length === 0 ? (
+              <Text style={styles.modalEmptyText}>No customers registered yet.</Text>
+            ) : (
+              <FlatList
+                data={customers}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item, index }) => (
+                  <View style={styles.customerListItem}>
+                    <Text style={styles.customerListIndex}>{index + 1}.</Text>
+                    <Text style={styles.customerListName}>{item.name}</Text>
+                  </View>
+                )}
+                contentContainerStyle={styles.modalListContent}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+            
+            <TouchableOpacity 
+              style={styles.modalCloseBtn} 
+              onPress={() => setIsCustomersModalVisible(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -811,5 +888,82 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     padding: SPACING.md
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '75%',
+    backgroundColor: theme.surface,
+    borderRadius: SIZES.radiusLg,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: SPACING.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    paddingBottom: SPACING.md,
+    marginBottom: SPACING.md
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.text
+  },
+  modalLoader: {
+    marginVertical: SPACING.xl
+  },
+  modalEmptyText: {
+    textAlign: 'center',
+    color: theme.textSecondary,
+    marginVertical: SPACING.xl
+  },
+  modalListContent: {
+    paddingBottom: SPACING.md
+  },
+  customerListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    gap: SPACING.sm
+  },
+  customerListIndex: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.textLight
+  },
+  customerListName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.text
+  },
+  modalCloseBtn: {
+    backgroundColor: theme.primary,
+    paddingVertical: 14,
+    borderRadius: SIZES.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.md
+  },
+  modalCloseBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700'
   }
 });
