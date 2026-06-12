@@ -50,7 +50,15 @@ export default function RegisterScreen({ navigation }) {
     try {
       setErrorMessage('');
       await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
+      
+      // Clear previous sign-in state to force account selection prompt
+      try {
+        await GoogleSignin.signOut();
+      } catch (signOutError) {
+        // Ignore error if not signed in
+      }
+
+      const userInfo = await GoogleSignin.signIn({ prompt: 'select_account' });
       const idToken = userInfo.idToken || (userInfo.data && userInfo.data.idToken);
       if (!idToken) {
         throw new Error('No ID token received from Google');

@@ -4,6 +4,11 @@ import { Platform, NativeModules } from 'react-native';
 
 // Dynamically determine the backend URL based on the Metro bundler's IP
 export const getBaseUrl = () => {
+  // If a production API URL is explicitly configured via environment variables, use it first
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
   try {
     // This gets the IP address of the machine running the Metro bundler
     const scriptURL = NativeModules.SourceCode?.scriptURL;

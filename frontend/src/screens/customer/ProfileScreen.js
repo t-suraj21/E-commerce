@@ -11,9 +11,12 @@ export default function ProfileScreen({ navigation }) {
   const { locale, changeLanguage, t } = useContext(LanguageContext);
   const { isDarkMode, toggleTheme, theme } = useContext(ThemeContext);
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(user?.isGoogleLogin && !user?.phone);
   const [editName, setEditName] = useState(user?.name || '');
   const [editPhone, setEditPhone] = useState(user?.phone || '');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSaveProfile = async () => {
@@ -21,12 +24,25 @@ export default function ProfileScreen({ navigation }) {
       Alert.alert('Error', 'Name cannot be empty.');
       return;
     }
+    if (user?.isGoogleLogin && password) {
+      if (password.length < 6) {
+        Alert.alert('Error', 'Password must be at least 6 characters long.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        Alert.alert('Error', 'Passwords do not match.');
+        return;
+      }
+    }
+    
     setIsSaving(true);
-    const result = await updateProfile(editName, editPhone);
+    const result = await updateProfile(editName, editPhone, user?.isGoogleLogin ? password : undefined);
     setIsSaving(false);
     
     if (result.success) {
       setIsEditing(false);
+      setPassword('');
+      setConfirmPassword('');
       Alert.alert('Success', 'Profile updated successfully.');
     } else {
       Alert.alert('Error', result.message);
@@ -92,6 +108,16 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]} showsVerticalScrollIndicator={false}>
+      {user?.isGoogleLogin && !user?.phone && (
+        <View style={styles.completionBanner}>
+          <Ionicons name="information-circle" size={20} color="#FFFFFF" />
+          <Text style={styles.completionText}>
+            {locale === 'en' 
+              ? 'Please complete your profile details below (Phone & Password).' 
+              : 'कृपया नीचे अपना प्रोफ़ाइल विवरण (फ़ोन और पासवर्ड) पूरा करें।'}
+          </Text>
+        </View>
+      )}
       {/* Header Profile Section */}
       <View style={[styles.profileHeader, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <View style={styles.headerTopRight}>
@@ -116,21 +142,80 @@ export default function ProfileScreen({ navigation }) {
 
         {isEditing ? (
           <View style={styles.editForm}>
-            <TextInput
-              style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="Full Name"
-              placeholderTextColor={theme.textLight}
-            />
-            <TextInput
-              style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background, marginTop: 10 }]}
-              value={editPhone}
-              onChangeText={setEditPhone}
-              placeholder="Phone Number"
-              placeholderTextColor={theme.textLight}
-              keyboardType="phone-pad"
-            />
+            {user?.isGoogleLogin && (
+              <View style={styles.inputFieldGroup}>
+                <Text style={[styles.inputFieldLabel, { color: theme.textSecondary }]}>Email (Google Login)</Text>
+                <TextInput
+                  style={[styles.editInput, { color: theme.textSecondary, borderColor: theme.border, backgroundColor: theme.border, opacity: 0.7, textAlign: 'left' }]}
+                  value={user?.email}
+                  editable={false}
+                />
+              </View>
+            )}
+            
+            <View style={styles.inputFieldGroup}>
+              <Text style={[styles.inputFieldLabel, { color: theme.textSecondary }]}>Full Name</Text>
+              <TextInput
+                style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background, textAlign: 'left' }]}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Full Name"
+                placeholderTextColor={theme.textLight}
+              />
+            </View>
+
+            <View style={styles.inputFieldGroup}>
+              <Text style={[styles.inputFieldLabel, { color: theme.textSecondary }]}>Phone Number</Text>
+              <TextInput
+                style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background, textAlign: 'left' }]}
+                value={editPhone}
+                onChangeText={setEditPhone}
+                placeholder="Phone Number"
+                placeholderTextColor={theme.textLight}
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            {user?.isGoogleLogin && (
+              <>
+                <View style={styles.inputFieldGroup}>
+                  <Text style={[styles.inputFieldLabel, { color: theme.textSecondary }]}>Set Password (Optional)</Text>
+                  <View style={[styles.passwordInputWrapper, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                    <TextInput
+                      style={[styles.passwordInput, { color: theme.text }]}
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="Enter new password"
+                      placeholderTextColor={theme.textLight}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={theme.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.inputFieldGroup}>
+                  <Text style={[styles.inputFieldLabel, { color: theme.textSecondary }]}>Confirm Password</Text>
+                  <View style={[styles.passwordInputWrapper, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                    <TextInput
+                      style={[styles.passwordInput, { color: theme.text }]}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      placeholder="Confirm password"
+                      placeholderTextColor={theme.textLight}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+              </>
+            )}
           </View>
         ) : (
           <>
@@ -321,5 +406,46 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     marginVertical: SPACING.md
+  },
+  completionBanner: {
+    backgroundColor: '#E65100',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+    width: '100%',
+  },
+  completionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  inputFieldGroup: {
+    width: '100%',
+    marginTop: 10,
+    alignItems: 'flex-start',
+  },
+  inputFieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  passwordInputWrapper: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: SIZES.radiusSm,
+    paddingHorizontal: SPACING.md,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  eyeIcon: {
+    padding: SPACING.xs,
   }
 });

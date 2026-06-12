@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../styles/theme';
 import { CartContext } from '../context/CartContext';
+import { AuthContext } from '../context/AuthContext';
 
 // Screens
 import HomeScreen from '../screens/customer/HomeScreen';
@@ -27,9 +28,13 @@ const Stack = createNativeStackNavigator();
 
 function BottomTabs() {
   const { cartCount } = useContext(CartContext);
+  const { user } = useContext(AuthContext);
+
+  const initialRoute = (user?.isGoogleLogin && !user?.phone) ? 'ProfileTab' : 'HomeTab';
 
   return (
     <Tab.Navigator
+      initialRouteName={initialRoute}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
           let iconName;

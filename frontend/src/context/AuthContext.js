@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 export const AuthContext = createContext();
 
@@ -26,8 +27,10 @@ export const AuthProvider = ({ children }) => {
             headers: { Authorization: `Bearer ${storedToken}` }
           });
           if (response.data.success) {
-            setUser(response.data.user);
-            await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+            const isGoogle = storedUser ? JSON.parse(storedUser).isGoogleLogin : false;
+            const updatedUser = { ...response.data.user, isGoogleLogin: isGoogle };
+            setUser(updatedUser);
+            await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
           } else {
             await logout();
           }
@@ -83,10 +86,11 @@ export const AuthProvider = ({ children }) => {
       const response = await apiClient.post('/auth/google', { idToken });
       if (response.data.success) {
         const { token: userToken, user: userData } = response.data;
+        const googleUserData = { ...userData, isGoogleLogin: true };
         await AsyncStorage.setItem('token', userToken);
-        await AsyncStorage.setItem('user', JSON.stringify(userData));
+        await AsyncStorage.setItem('user', JSON.stringify(googleUserData));
         setToken(userToken);
-        setUser(userData);
+        setUser(googleUserData);
         return { success: true };
       }
     } catch (error) {
@@ -129,15 +133,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const updateProfile = async (name, phone) => {
+  const updateProfile = async (name, phone, password) => {
     try {
       setIsLoading(true);
-      const response = await apiClient.put('/auth/profile', { name, phone }, {
+      const payload = { name, phone };
+      if (password) {
+        payload.password = password;
+      }
+      const response = await apiClient.put('/auth/profile', payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
-        setUser(response.data.user);
-        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+        const isGoogle = user ? user.isGoogleLogin : false;
+        const updatedUser = { ...response.data.user, isGoogleLogin: isGoogle };
+        setUser(updatedUser);
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
         return { success: true };
       }
     } catch (error) {
@@ -157,6 +167,18 @@ export const AuthProvider = ({ children }) => {
       await AsyncStorage.removeItem('user');
       setToken(null);
       setUser(null);
+
+      // Sign out from Google to clean up active session and force account chooser next time
+      try {
+        GoogleSignin.configure({
+          webClientId: '1079591731539-1adt18ka2qqjbktoe81je05r835ds480.apps.googleusercontent.com',
+          iosClientId: '1079591731539-33k2hf1nc8357p3vpoopb53b9kcc0e9f.apps.googleusercontent.com',
+          offlineAccess: true,
+        });
+        await GoogleSignin.signOut();
+      } catch (googleError) {
+        console.log('Error during Google sign out:', googleError.message);
+      }
     } catch (error) {
       console.error('Error removing token during logout:', error);
     }

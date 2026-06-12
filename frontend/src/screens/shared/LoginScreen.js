@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
 import { AuthContext } from '../../context/AuthContext';
 import { COLORS, SPACING, SIZES, SHADOWS } from '../../styles/theme';
@@ -34,12 +35,14 @@ export default function LoginScreen({ navigation }) {
   const handleLogin = async () => {
     if (!email || !password) {
       setErrorMessage('Please fill in all fields');
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
     setErrorMessage('');
     const result = await login(email.trim(), password);
     if (!result.success) {
       setErrorMessage(result.message);
+      Alert.alert('Login Failed', 'Incorrect Email, Phone Number or Password. Please try again.');
     } else {
       await analytics().logLogin({ method: 'email' });
     }
@@ -49,7 +52,15 @@ export default function LoginScreen({ navigation }) {
     try {
       setErrorMessage('');
       await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
+      
+      // Clear previous sign-in state to force account selection prompt
+      try {
+        await GoogleSignin.signOut();
+      } catch (signOutError) {
+        // Ignore error if not signed in
+      }
+
+      const userInfo = await GoogleSignin.signIn({ prompt: 'select_account' });
       const idToken = userInfo.idToken || (userInfo.data && userInfo.data.idToken);
       if (!idToken) {
         throw new Error('No ID token received from Google');
