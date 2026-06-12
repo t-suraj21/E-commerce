@@ -42,7 +42,7 @@ export default function LoginScreen({ navigation }) {
     const result = await login(email.trim(), password);
     if (!result.success) {
       setErrorMessage(result.message);
-      Alert.alert('Login Failed', 'Incorrect Email, Phone Number or Password. Please try again.');
+      Alert.alert('Login Failed', result.message);
     } else {
       await analytics().logLogin({ method: 'email' });
     }

@@ -1,4 +1,4 @@
-import React, { useContext,  useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
-import {  SPACING, SIZES, SHADOWS } from '../../styles/theme';
+import { SPACING, SIZES, SHADOWS } from '../../styles/theme';
 import { ThemeContext } from '../../context/ThemeContext';
 import apiClient, { getBaseUrl } from '../../api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,7 +46,7 @@ export default function AddEditProductScreen({ route, navigation }) {
   const [categoryId, setCategoryId] = useState(editProduct?.categoryId || preselectedCategoryId || null);
   const [isActive, setIsActive] = useState(editProduct?.isActive !== undefined ? editProduct.isActive : true);
   const [discountPercent, setDiscountPercent] = useState(editProduct ? editProduct.discountPercent.toString() : '0');
-  
+
   const [localImages, setLocalImages] = useState([]);
 
   const showActionSheet = () => {
@@ -79,7 +79,7 @@ export default function AddEditProductScreen({ route, navigation }) {
       const parsed = typeof editProduct.images === 'string' ? JSON.parse(editProduct.images) : editProduct.images;
       if (Array.isArray(parsed)) existingImages.push(...parsed);
     }
-  } catch(e) {}
+  } catch (e) { }
   const uniqueExistingImages = [...new Set(existingImages)];
 
   const pickImages = async () => {
@@ -229,7 +229,7 @@ export default function AddEditProductScreen({ route, navigation }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        
+
         <Text style={styles.headerTitle}>{isEditMode ? 'Edit Product' : 'Add New Product'}</Text>
         <View style={{ width: 40 }} />
       </View>
