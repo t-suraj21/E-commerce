@@ -63,12 +63,21 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email/phone and password' });
     }
 
+    const trimmedInput = email.trim();
+    let queryConditions = [{ email: trimmedInput }];
+
+    // If input contains digits, check if it can be matched as a phone number
+    const cleanPhone = trimmedInput.replace(/\D/g, '');
+    if (cleanPhone.length >= 10) {
+      const last10Digits = cleanPhone.slice(-10);
+      queryConditions.push({ phone: { $regex: last10Digits + '$' } });
+    } else {
+      queryConditions.push({ phone: trimmedInput });
+    }
+
     // Find user by email or phone
     const user = await User.findOne({ 
-      $or: [
-        { email: email },
-        { phone: email }
-      ]
+      $or: queryConditions
     });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email/phone or password' });
