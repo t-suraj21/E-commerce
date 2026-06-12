@@ -420,6 +420,7 @@ export default function DashboardScreen({ navigation }) {
                 </View>
               );
             })}
+          </View>
         )}
       </View>
 
