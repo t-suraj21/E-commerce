@@ -108,27 +108,23 @@ export function setupNotificationListeners(navigation) {
 
     if (data && data.orderId) {
       // Navigate to order details / tracking
-      const orderIdVal = parseInt(data.orderId, 10);
-      if (!isNaN(orderIdVal)) {
-        Alert.alert(
-          response.notification.request.content.title,
-          response.notification.request.content.body,
-          [
-            {
-              text: 'Track Order',
-              onPress: () => {
-                navigation.navigate('OrderTracking', { orderId: orderIdVal });
-              }
-            },
-            { text: 'Close', style: 'cancel' }
-          ]
-        );
-      }
+      const orderIdVal = data.orderId;
+      Alert.alert(
+        response.notification.request.content.title,
+        response.notification.request.content.body,
+        [
+          {
+            text: 'Track Order',
+            onPress: () => {
+              navigation.navigate('OrderTracking', { orderId: orderIdVal });
+            }
+          },
+          { text: 'Close', style: 'cancel' }
+        ]
+      );
     } else if (data && data.productId) {
-      const productIdVal = parseInt(data.productId, 10);
-      if (!isNaN(productIdVal)) {
-        navigation.navigate('ProductDetails', { productId: productIdVal });
-      }
+      const productIdVal = data.productId;
+      navigation.navigate('ProductDetails', { productId: productIdVal });
     }
   });
 

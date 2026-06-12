@@ -117,19 +117,15 @@ export default function NotificationHistoryScreen({ navigation }) {
         }
 
         if (payload && payload.orderId) {
-          const orderIdVal = parseInt(payload.orderId, 10);
-          if (!isNaN(orderIdVal)) {
-            if (user && user.role === 'admin') {
-              navigation.navigate('OrderDetails', { orderId: orderIdVal });
-            } else {
-              navigation.navigate('OrderTracking', { orderId: orderIdVal });
-            }
+          const orderIdVal = payload.orderId;
+          if (user && user.role === 'admin') {
+            navigation.navigate('OrderDetails', { orderId: orderIdVal });
+          } else {
+            navigation.navigate('OrderTracking', { orderId: orderIdVal });
           }
         } else if (payload && payload.productId) {
-          const productIdVal = parseInt(payload.productId, 10);
-          if (!isNaN(productIdVal)) {
-            navigation.navigate('ProductDetails', { productId: productIdVal });
-          }
+          const productIdVal = payload.productId;
+          navigation.navigate('ProductDetails', { productId: productIdVal });
         }
       }
     };
