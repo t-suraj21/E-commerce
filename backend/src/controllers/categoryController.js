@@ -11,8 +11,8 @@ const getCategories = async (req, res) => {
       return res.json({ success: true, count: cached.length, categories: cached });
     }
 
-    const categories = await Category.find().sort({ name: 1 });
-    cacheService.set('categories', categories, 600); // 10 minutes cache
+    const categories = await Category.find().select('id name description imageUrl').sort({ name: 1 });
+    cacheService.set('categories', categories, 300); // 5 minutes cache
     res.json({ success: true, count: categories.length, categories });
   } catch (error) {
     console.error('Get categories error:', error);
@@ -39,6 +39,7 @@ const createCategory = async (req, res) => {
 
     const category = await Category.create({ name, description, imageUrl });
     cacheService.delete('categories');
+    cacheService.delete('home:data');
     res.status(201).json({ success: true, category });
   } catch (error) {
     console.error('Create category error:', error);
@@ -69,6 +70,7 @@ const updateCategory = async (req, res) => {
     await category.save();
 
     cacheService.delete('categories');
+    cacheService.delete('home:data');
     res.json({ success: true, category });
   } catch (error) {
     console.error('Update category error:', error);
@@ -89,6 +91,7 @@ const deleteCategory = async (req, res) => {
 
     await category.deleteOne();
     cacheService.delete('categories');
+    cacheService.delete('home:data');
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     console.error('Delete category error:', error);

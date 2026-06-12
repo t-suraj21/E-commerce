@@ -1,14 +1,26 @@
 const { Coupon } = require('../models');
+const cacheService = require('../services/cacheService');
 
 // @desc    Get active coupons
 // @route   GET /api/coupons/active
 // @access  Public
 const getActiveCoupons = async (req, res) => {
   try {
+    const cached = cacheService.get('coupons:active');
+    if (cached) {
+      return res.json({
+        success: true,
+        coupons: cached
+      });
+    }
+
     const coupons = await Coupon.find({
       isActive: true,
       expirationDate: { $gt: new Date() }
-    }).sort({ createdAt: -1 });
+    }).select('id code discountType discountValue minOrderAmount maxDiscountAmount expirationDate description')
+      .sort({ createdAt: -1 });
+
+    cacheService.set('coupons:active', coupons, 300); // 5 minutes cache
 
     res.json({
       success: true,

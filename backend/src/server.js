@@ -4,6 +4,8 @@ const { execSync } = require('child_process');
 
 const PORT = process.env.PORT || 8001;
 
+let serverInstance = null;
+
 const startListening = () => {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`===================================================`);
@@ -12,6 +14,8 @@ const startListening = () => {
     console.log(` Server URL: http://0.0.0.0:${PORT}`);
     console.log(`===================================================`);
   });
+  
+  serverInstance = server;
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -79,5 +83,30 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// Graceful shutdown listeners
+const gracefulShutdown = (signal) => {
+  console.log(`\n🔄 ${signal} received. Starting graceful shutdown...`);
+  
+  if (serverInstance) {
+    serverInstance.close(async () => {
+      console.log('✅ HTTP server closed.');
+      try {
+        const mongoose = require('mongoose');
+        await mongoose.connection.close();
+        console.log('✅ MongoDB connection closed.');
+        process.exit(0);
+      } catch (err) {
+        console.error('❌ Error closing MongoDB connection:', err.message);
+        process.exit(1);
+      }
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 startServer();

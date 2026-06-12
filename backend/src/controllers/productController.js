@@ -39,6 +39,7 @@ const getProducts = async (req, res) => {
 
     const count = await Product.countDocuments(whereClause);
     const products = await Product.find(whereClause)
+      .select('id name price discountPrice discountPercent stockQuantity unit imageUrl isActive isBestSeller isTodayDeal isNewArrival createdAt')
       .populate('category', 'id name')
       .sort({ name: 1 })
       .skip(offsetVal)
@@ -134,6 +135,7 @@ const createProduct = async (req, res) => {
 
     // Invalidate Cache
     cacheService.clearPattern('products:');
+    cacheService.delete('home:data');
 
     res.status(201).json({ success: true, product });
   } catch (error) {
@@ -221,6 +223,7 @@ const updateProduct = async (req, res) => {
     // Invalidate Cache
     cacheService.clearPattern('products:');
     cacheService.delete(`product:${req.params.id}`);
+    cacheService.delete('home:data');
 
     res.json({ success: true, product: updatedProduct });
   } catch (error) {
@@ -253,6 +256,7 @@ const deleteProduct = async (req, res) => {
     // Invalidate Cache
     cacheService.clearPattern('products:');
     cacheService.delete(`product:${req.params.id}`);
+    cacheService.delete('home:data');
 
     res.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
@@ -272,31 +276,51 @@ const getHomeFeed = async (req, res) => {
       return res.json({ success: true, ...cached });
     }
 
-    // Fetch categories
-    const categories = await Category.find().sort({ name: 1 });
+    // Fetch categories with optimized fields
+    const categories = await Category.find().select('id name imageUrl').sort({ name: 1 });
 
-    // Fetch Today's Deals
+    // Fetch Today's Deals with optimized fields
     const todayDeals = await Product.find({ isTodayDeal: true, isActive: true })
+      .select('id name price discountPrice discountPercent stockQuantity unit imageUrl isActive isBestSeller isTodayDeal isNewArrival')
       .populate('category', 'id name')
       .sort({ name: 1 })
       .limit(10);
 
-    // Fetch Best Sellers
+    // Fetch Best Sellers with optimized fields
     const bestSellers = await Product.find({ isBestSeller: true, isActive: true })
+      .select('id name price discountPrice discountPercent stockQuantity unit imageUrl isActive isBestSeller isTodayDeal isNewArrival')
       .populate('category', 'id name')
       .sort({ name: 1 })
       .limit(10);
 
-    // Fetch New Arrivals
+    // Fetch New Arrivals with optimized fields
     const newArrivals = await Product.find({ isNewArrival: true, isActive: true })
+      .select('id name price discountPrice discountPercent stockQuantity unit imageUrl isActive isBestSeller isTodayDeal isNewArrival')
       .populate('category', 'id name')
       .sort({ createdAt: -1 })
       .limit(10);
 
-    // Fetch Recommended
+    // Fetch Recommended with optimized fields via pipeline projection
     const recommended = await Product.aggregate([
       { $match: { isActive: true } },
-      { $sample: { size: 10 } }
+      { $sample: { size: 10 } },
+      {
+        $project: {
+          id: '$_id',
+          categoryId: 1,
+          name: 1,
+          price: 1,
+          discountPrice: 1,
+          discountPercent: 1,
+          stockQuantity: 1,
+          unit: 1,
+          imageUrl: 1,
+          isActive: 1,
+          isBestSeller: 1,
+          isTodayDeal: 1,
+          isNewArrival: 1
+        }
+      }
     ]);
     
     const populatedRecommended = await Product.populate(recommended, { path: 'category', select: 'id name' });
@@ -320,7 +344,7 @@ const getHomeFeed = async (req, res) => {
         recommended: formattedRecommended
       }
     };
-    cacheService.set('products:home', feedData, 600); // 10 minutes cache
+    cacheService.set('products:home', feedData, 300); // 5 minutes cache (per requirement 5)
 
     res.json({
       success: true,

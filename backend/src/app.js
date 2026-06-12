@@ -3,6 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const compression = require('compression');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
@@ -16,13 +18,17 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const couponRoutes = require('./routes/couponRoutes');
+const homeRoutes = require('./routes/homeRoutes');
+
+const loggerMiddleware = require('./middlewares/loggerMiddleware');
+const errorMiddleware = require('./middlewares/errorMiddleware');
+const metricsService = require('./services/metricsService');
 
 const app = express();
 
-app.use((req, res, next) => {
-  console.log(`[REQUEST] ${req.method} ${req.url}`);
-  next();
-});
+// 0. Gzip Compression and Logging Middleware
+app.use(compression());
+app.use(loggerMiddleware);
 
 // 1. Security Enhancements - Helmet Headers
 app.use(helmet());
@@ -86,6 +92,47 @@ const sanitizeInput = (req, res, next) => {
 };
 app.use(sanitizeInput);
 
+// Health Check Endpoint (exposed to Uptime monitors and includes performance stats)
+app.get('/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  let dbLatencyMs = null;
+  
+  try {
+    const startDb = Date.now();
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.db.admin().ping();
+      dbStatus = 'connected';
+      dbLatencyMs = Date.now() - startDb;
+    }
+  } catch (err) {
+    console.error('Database health ping failed:', err.message);
+  }
+  
+  const metrics = metricsService.getMetrics();
+  
+  res.json({
+    success: true,
+    status: 'running',
+    timestamp: new Date(),
+    metrics: {
+      uptimeSeconds: metrics.uptimeSeconds,
+      memoryUsage: {
+        rssMb: parseFloat((process.memoryUsage().rss / 1024 / 1024).toFixed(2)),
+        heapTotalMb: parseFloat((process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2)),
+        heapUsedMb: parseFloat((process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2))
+      },
+      cpuUsage: process.cpuUsage(),
+      requests: metrics.requests,
+      database: {
+        status: dbStatus,
+        latencyMs: dbLatencyMs,
+        activeConnectionsCount: mongoose.connection.base.connections.length,
+        ...metrics.database
+      }
+    }
+  });
+});
+
 // Root Route
 app.get('/', (req, res) => {
   res.json({
@@ -97,6 +144,7 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
+app.use('/api/home', homeRoutes); // New unified home feed endpoint
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
@@ -116,12 +164,6 @@ app.use((req, res, next) => {
 });
 
 // Global Error Handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled Server Error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error'
-  });
-});
+app.use(errorMiddleware);
 
 module.exports = app;
