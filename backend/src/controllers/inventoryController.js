@@ -1,6 +1,5 @@
 const { Product, Category, Order, OrderItem, User } = require('../models');
 const { Op } = require('sequelize');
-const whatsappService = require('../services/whatsappCloudService');
 const { sequelize } = require('../config/db');
 
 // @desc    Get inventory summary metrics
@@ -116,38 +115,6 @@ const updateProductStock = async (req, res) => {
 
     const oldStock = product.stockQuantity;
     await product.update({ stockQuantity: parseInt(stockQuantity, 10) });
-
-    // Handle Out-Of-Stock notifications for pending orders
-    if (oldStock > 0 && parseInt(stockQuantity, 10) === 0) {
-      try {
-        // Find all pending orders that contain this product
-        const affectedOrders = await Order.findAll({
-          where: { status: 'pending' },
-          include: [
-            {
-              model: OrderItem,
-              as: 'items',
-              where: { productId: product.id }
-            },
-            {
-              model: User,
-              as: 'user',
-              attributes: ['id', 'name', 'phone']
-            }
-          ]
-        });
-
-        // Notify affected users
-        for (const order of affectedOrders) {
-          if (order.user) {
-            whatsappService.sendOutOfStockMessage(order, order.user, product)
-              .catch(err => console.error(`Error sending OutOfStock WhatsApp for order ${order.id}:`, err));
-          }
-        }
-      } catch (notifyErr) {
-        console.error('Error notifying users of out of stock:', notifyErr);
-      }
-    }
 
     res.json({
       success: true,

@@ -147,11 +147,16 @@ const forgotPassword = async (req, res) => {
     console.log(`=========================================`);
 
     // In production, send SMS/Email. In dev, we return it in response and log it.
-    res.json({
+    const responsePayload = {
       success: true,
-      message: 'OTP sent successfully (Simulated)',
-      otp // Return OTP directly to make verification simple for testing
-    });
+      message: 'OTP sent successfully (Simulated)'
+    };
+
+    if (process.env.NODE_ENV !== 'production') {
+      responsePayload.otp = otp;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Forgot password error:', error);
     res.status(500).json({ success: false, message: 'Server error generating OTP' });
@@ -341,7 +346,7 @@ const googleLogin = async (req, res) => {
 // @access  Private
 const updateProfile = async (req, res) => {
   try {
-    const { name, phone } = req.body;
+    const { name, phone, password } = req.body;
     const user = await User.findByPk(req.user.id);
     
     if (!user) {
@@ -350,6 +355,7 @@ const updateProfile = async (req, res) => {
 
     if (name) user.name = name;
     if (phone !== undefined) user.phone = phone; // Allow empty phone
+    if (password) user.password = password; // Sets password, will be hashed in beforeUpdate hook
 
     await user.save();
 

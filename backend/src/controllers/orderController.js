@@ -1,7 +1,6 @@
 const { sequelize } = require('../config/db');
 const { Order, OrderItem, CartItem, Product, Address, User, Payment, Coupon } = require('../models');
 const { sendNotificationToUser, sendNotificationToRole } = require('../services/notificationService');
-const whatsappService = require('../services/whatsappCloudService');
 
 // Helper to calculate price based on weight
 const calculateWeightPrice = (product, basePrice, weight) => {
@@ -235,9 +234,7 @@ const createOrder = async (req, res) => {
       { orderId: order.id.toString(), type: 'new_order' }
     ).catch(err => console.error('Error sending shopkeeper notification:', err));
 
-    // Send WhatsApp Cloud API Notification
-    whatsappService.sendOrderPlacedMessage(completedOrder, req.user)
-      .catch(err => console.error('Error sending WhatsApp order placed message:', err));
+    // WhatsApp Cloud API notification removed
 
   } catch (error) {
     await transaction.rollback();
@@ -343,26 +340,6 @@ const updateOrderStatus = async (req, res) => {
           message: 'Order cannot be cancelled because it is already ' + order.status
         });
       }
-
-      // Restore product stock on cancellation
-      const orderItems = await OrderItem.findAll({ where: { orderId: order.id } });
-      for (const item of orderItems) {
-        await Product.increment('stockQuantity', {
-          by: item.quantity,
-          where: { id: item.productId }
-        });
-      }
-      // Admin can change to any status
-      if (status === 'cancelled' && order.status !== 'cancelled') {
-        // Restore product stock on cancellation
-        const orderItems = await OrderItem.findAll({ where: { orderId: order.id } });
-        for (const item of orderItems) {
-          await Product.increment('stockQuantity', {
-            by: item.quantity,
-            where: { id: item.productId }
-          });
-        }
-      }
     }
 
     // Perform updates
@@ -379,6 +356,18 @@ const updateOrderStatus = async (req, res) => {
     }
 
     const oldStatus = order.status;
+
+    // Restore product stock globally on cancellation (customer cancellation or admin rejection)
+    if (status === 'cancelled' && oldStatus !== 'cancelled') {
+      const orderItems = await OrderItem.findAll({ where: { orderId: order.id } });
+      for (const item of orderItems) {
+        await Product.increment('stockQuantity', {
+          by: item.quantity,
+          where: { id: item.productId }
+        });
+      }
+    }
+
     await order.update(updates);
 
     // If the order is marked as paid (e.g., delivered COD), update the payment record
@@ -448,18 +437,7 @@ const updateOrderStatus = async (req, res) => {
       ]
     });
 
-    // Send WhatsApp Cloud API Status Update Notification
-    if (status && status !== oldStatus && updatedOrder.user) {
-      if (status === 'accepted') {
-        whatsappService.sendOrderConfirmedMessage(updatedOrder, updatedOrder.user).catch(err => console.error(err));
-      } else if (status === 'out_for_delivery') {
-        whatsappService.sendShippedMessage(updatedOrder, updatedOrder.user).catch(err => console.error(err));
-      } else if (status === 'delivered') {
-        whatsappService.sendDeliveredMessage(updatedOrder, updatedOrder.user).catch(err => console.error(err));
-      } else if (status === 'cancelled') {
-        whatsappService.sendCancelledMessage(updatedOrder, updatedOrder.user, updates.rejectionReason).catch(err => console.error(err));
-      }
-    }
+    // WhatsApp Cloud API notification removed
 
     res.json({ success: true, order: updatedOrder });
   } catch (error) {

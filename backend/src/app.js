@@ -16,7 +16,6 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const couponRoutes = require('./routes/couponRoutes');
-const whatsappRoutes = require('./routes/whatsappRoutes');
 
 const app = express();
 
@@ -55,7 +54,11 @@ app.use('/api/auth', authLimiter);
 
 // 3. CORS and Parser
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static files for uploads
@@ -105,7 +108,6 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/coupons', couponRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
 
 // 404 Route handler
 app.use((req, res, next) => {
