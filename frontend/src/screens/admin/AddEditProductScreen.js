@@ -366,7 +366,8 @@ export default function AddEditProductScreen({ route, navigation }) {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
               {uniqueExistingImages.map((uri, index) => {
                 const isLocal = uri.startsWith('/');
-                const fullUri = isLocal ? `http://10.0.2.2:5000${uri}` : uri;
+                const baseUrl = getBaseUrl().replace(/\/api\/?$/, '');
+                const fullUri = isLocal ? `${baseUrl}${uri}` : uri;
                 return (
                   <View key={`existing-${index}`} style={styles.imagePreviewContainer}>
                     <Image source={{ uri: fullUri }} style={styles.imagePreview} />
