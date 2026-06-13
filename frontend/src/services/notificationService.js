@@ -133,3 +133,29 @@ export function setupNotificationListeners(navigation) {
     Notifications.removeNotificationSubscription(responseListener);
   };
 }
+
+/**
+ * Show a local popup notification immediately
+ * @param {string} title
+ * @param {string} body
+ * @param {object} data
+ */
+export async function showLocalNotification(title, body, data = {}) {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data,
+        sound: 'default',
+        android: {
+          channelId: 'default',
+        },
+      },
+      trigger: null, // show immediately
+    });
+  } catch (error) {
+    console.log('Error triggering local notification:', error.message);
+  }
+}
+

@@ -1,7 +1,8 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import { AuthContext } from './AuthContext';
 import apiClient from '../api/client';
+import { showLocalNotification } from '../services/notificationService';
 
 export const NotificationContext = createContext();
 
@@ -11,15 +12,35 @@ export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
+  const shownNotificationIds = useRef(new Set());
+  const isFirstLoad = useRef(true);
+
   const fetchNotifications = async (showLoading = true) => {
     if (!user) return;
     try {
       if (showLoading) setIsLoading(true);
       const response = await apiClient.get('/notifications');
       if (response.data.success) {
-        setNotifications(response.data.notifications);
-        const unread = response.data.notifications.filter(n => !n.isRead).length;
+        const fetchedNotifs = response.data.notifications || [];
+        setNotifications(fetchedNotifs);
+        const unread = fetchedNotifs.filter(n => !n.isRead).length;
         setUnreadCount(unread);
+
+        if (isFirstLoad.current) {
+          // Record current list on first load to prevent showing popups for old/past notifications
+          fetchedNotifs.forEach(n => shownNotificationIds.current.add(n.id));
+          isFirstLoad.current = false;
+        } else {
+          // On subsequent updates (polling/foreground pushes), check for new unread notifications
+          fetchedNotifs.forEach(n => {
+            if (!n.isRead && !shownNotificationIds.current.has(n.id)) {
+              shownNotificationIds.current.add(n.id);
+              showLocalNotification(n.title, n.body, n.data);
+            } else {
+              shownNotificationIds.current.add(n.id);
+            }
+          });
+        }
       }
     } catch (error) {
       console.log('Error fetching notifications:', error.message);
@@ -61,12 +82,21 @@ export const NotificationProvider = ({ children }) => {
   // Fetch notifications when user changes
   useEffect(() => {
     if (user) {
+      isFirstLoad.current = true;
+      shownNotificationIds.current.clear();
       // First load shows loading spinner
       fetchNotifications(true);
       
       // Listen to foreground notifications to update state in real-time
       const subscription = Notifications.addNotificationReceivedListener(notification => {
         console.log('🔔 Foreground Notification Received in Context, updating list:', notification.request.content.title);
+        
+        // Extract notificationId from payload if present to avoid duplicates
+        const pushNotifId = notification.request.content.data?.notificationId;
+        if (pushNotifId) {
+          shownNotificationIds.current.add(pushNotifId);
+        }
+
         fetchNotifications(false); // Silent update
       });
 
@@ -82,6 +112,8 @@ export const NotificationProvider = ({ children }) => {
     } else {
       setNotifications([]);
       setUnreadCount(0);
+      isFirstLoad.current = true;
+      shownNotificationIds.current.clear();
     }
   }, [user]);
 
@@ -100,3 +132,4 @@ export const NotificationProvider = ({ children }) => {
     </NotificationContext.Provider>
   );
 };
+

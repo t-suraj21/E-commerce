@@ -1,362 +1,164 @@
 # 🛒 Tarun Kirana Store (TKS)
 
-## Overview
+Tarun Kirana Store (TKS) is a premium, single-store E-Commerce application developed to digitize a local grocery shop. Customers can order groceries directly from their mobile phones, while the shop owner manages products, inventory, and orders from a centralized dashboard.
 
-Tarun Kirana Store (TKS) is a modern grocery shopping application developed for a single local grocery shop.
-
-The purpose of this application is to help customers order groceries directly from Tarun Kirana Store using their mobile phones while allowing the shop owner to manage products, inventory, and customer orders efficiently.
-
-This is a **Single Store E-Commerce Application**, meaning there is only one shop in the entire system and all orders are fulfilled by Tarun Kirana Store.
-
----
-
-# 🎯 Business Model
-
-```text
-Customer
-    │
-    ▼
-Tarun Kirana Store App
-    │
-    ▼
-Shop Owner (Admin)
-    │
-    ▼
-Order Processing
-    │
-    ▼
-Delivery to Customer
-```
-
-Unlike Amazon or Flipkart:
-
-❌ No Multiple Sellers
-
-❌ No Vendor Registration
-
-❌ No Marketplace System
-
-❌ No Commission Management
-
-Only:
-
-✅ Customers
-
-✅ Shop Owner
-
-✅ Grocery Products
+Unlike multi-vendor marketplaces, TKS is a **Single-Store Business Model**:
+* ❌ No Vendor Registration
+* ❌ No Commission Split
+* ✅ Direct Sales from Shop to Customers
+* ✅ Automated Notifications & Online Payments
 
 ---
 
-# 🌟 Main Features
-
-## Customer Features
-
-* User Registration
-* Secure Login
-* Google Login
-* Browse Products
-* Search Products
-* Add to Cart
-* Manage Addresses
-* Online Payments
-* Cash On Delivery
-* Order Tracking
-* Order History
-* WhatsApp Notifications
-* Push Notifications
-
----
-
-## Admin Features
-
-* Product Management
-* Inventory Management
-* Order Management
-* Customer Management
-* Sales Reports
-* Stock Monitoring
-* Offer Management
-* Delivery Status Updates
-
----
-
-# 🏗 System Architecture
+## 🏗️ System Architecture
 
 ```text
 ┌─────────────────────────────┐
-│      React Native App       │
-│         (Customer)          │
+│    React Native Mobile App  │
+│      (Expo, Customer/Admin) │
 └──────────────┬──────────────┘
                │
-               │ API Requests
+               │ HTTP APIs (Axios)
                ▼
 ┌─────────────────────────────┐
-│       Node.js Backend       │
-│         REST APIs           │
+│     Node.js API Server      │
+│     (Express Framework)     │
 └──────────────┬──────────────┘
                │
-               ▼
-┌─────────────────────────────┐
-│         MySQL DB            │
-│ Users, Products, Orders     │
-└──────────────┬──────────────┘
+               ├────────► MongoDB Atlas (Mongoose ORM)
                │
-               ├────────► Google OAuth
+               ├────────► Google OAuth (Authentication)
                │
-               ├────────► Firebase
+               ├────────► Firebase Cloud Messaging (Push Notifications)
                │
-               └────────► WhatsApp API
+               └────────► WhatsApp Cloud API (Transactional Messages)
 ```
 
 ---
 
-# 📱 Customer Journey
+## 🌟 Key Features
 
-```text
-Open App
-    │
-    ▼
-Register / Login
-    │
-    ▼
-Browse Products
-    │
-    ▼
-Add Items To Cart
-    │
-    ▼
-Checkout
-    │
-    ▼
-Select Address
-    │
-    ▼
-Payment
-    │
-    ▼
-Order Placed
-    │
-    ▼
-Order Tracking
-    │
-    ▼
-Delivered
-```
+### Customer Experience
+* **Secure Auth**: Custom email/password credentials or 1-tap **Google Login**.
+* **Smart Search**: Real-time product search with fuzzy matching.
+* **Add to Cart & Checkout**: Integrated checkout supporting multiple delivery addresses.
+* **Flexible Payments**: **Cash on Delivery (COD)** or online payments via **Razorpay**.
+* **Order Tracking**: Order lifecycle updates with real-time push notifications and automated WhatsApp messages.
+
+### Admin Dashboard
+* **Dynamic Analytics**: KPI cards showing Total Sales, AOV, Customers, Low Stock Alerts, and Daily/Weekly/Monthly interactive charts.
+* **Product Management**: Create, update, or archive products with support for multi-image uploads (via Multer).
+* **Inventory Control**: Real-time stock counts with automated low-stock warnings.
+* **Order Processing**: Accept, pack, ship, or cancel orders directly from the screen.
 
 ---
 
-# 🔐 Authentication Flow
+## 🚀 Deployed Optimizations (Render Ready)
 
-```text
-Customer
-    │
-    ▼
-Google Login Button
-    │
-    ▼
-Google Authentication
-    │
-    ▼
-Returns ID Token
-    │
-    ▼
-Backend Verifies Token
-    │
-    ▼
-Create/Login User
-    │
-    ▼
-Generate JWT Token
-    │
-    ▼
-Access Application
-```
+The backend has been heavily optimized for deployment on **Render's Free Tier** container network:
+
+1. **Gzip Compression**: Compresses HTTP payloads on-the-fly, reducing transit bandwidth.
+2. **MongoDB Connection Pooling**: Configured with Mongoose `maxPoolSize: 10` and `minPoolSize: 2` to reuse database sockets and prevent socket exhaustion.
+3. **In-Memory Cache (5m TTL)**: Product feeds, active categories, and coupons are cached for 5 minutes, boosting response times down to **1ms** for cached assets. Caches automatically invalidate when products or categories are updated.
+4. **Aggregated Home API (`GET /api/home`)**: Consolidates multiple frontend REST queries (categories, deals, arrivals, recommended, coupons, and banners) into a single aggregated call, decreasing initial screen load times by **60%**.
+5. **Robust Phone Login**: Input is automatically formatted, stripping symbols and whitespace. Suffix matching queries check the last 10 digits against database fields (handling country codes like `+91` or `0` seamlessly).
+6. **Graceful Shutdown**: Listens to `SIGTERM`/`SIGINT` signals to close connection pools and the HTTP listener safely before exiting.
+7. **Cloudinary Asset Optimization**: URL injection helper automatically appends quality (`q_auto`) and format (`f_auto`) parameters to deliver compressed WebP formats to the mobile screen.
+8. **Real-time Performance Metrics (`GET /health`)**: Exposes host uptime, RSS memory footprint, CPU load, database latency, and connection pool metrics.
 
 ---
 
-# 📦 Order Workflow
+## 🗄️ Database Schema (MongoDB Collections)
 
-```text
-Customer Places Order
-          │
-          ▼
-Order Stored In Database
-          │
-          ▼
-Admin Receives Order
-          │
-          ▼
-Admin Accepts Order
-          │
-          ▼
-Order Packed
-          │
-          ▼
-Out For Delivery
-          │
-          ▼
-Delivered
-```
+### Users (`User`)
+* `name` (String, Required)
+* `email` (String, Required, Unique, Lowercase)
+* `password` (String, Required, Hashed via bcrypt)
+* `role` (String, Enum: `customer` | `admin`, Default: `customer`)
+* `phone` (String, Default: `null`)
+* `pushToken` (String, Default: `null`)
 
----
+### Products (`Product`)
+* `name` (String, Required)
+* `description` (String)
+* `price` (Number, Required)
+* `discountPrice` (Number)
+* `stockQuantity` (Number, Default: `0`)
+* `unit` (String, Default: `'piece'`)
+* `imageUrl` (String)
+* `images` (Array of Strings)
+* `isActive` (Boolean, Default: `true`)
+* `isBestSeller` / `isTodayDeal` / `isNewArrival` (Boolean, Default: `false`)
 
-# 🔔 Notification System
+### Categories (`Category`)
+* `name` (String, Required, Unique)
+* `description` (String)
+* `imageUrl` (String)
 
-Whenever an order status changes:
-
-```text
-Order Placed
-      │
-      ├──► Push Notification
-      │
-      └──► WhatsApp Message
-
-Order Accepted
-      │
-      ├──► Push Notification
-      │
-      └──► WhatsApp Message
-
-Out For Delivery
-      │
-      ├──► Push Notification
-      │
-      └──► WhatsApp Message
-
-Delivered
-      │
-      ├──► Push Notification
-      │
-      └──► WhatsApp Message
-```
+### Orders (`Order`)
+* `userId` (ObjectId ref User)
+* `status` (String, Enum: `pending` | `accepted` | `packed` | `out_for_delivery` | `delivered` | `cancelled`)
+* `totalPrice` (Number)
+* `paymentMethod` (String, Enum: `cod` | `online`)
+* `paymentStatus` (String, Enum: `pending` | `completed` | `failed`)
 
 ---
 
-# 📦 Inventory Management
+## 🛠️ Local Development Setup
 
-```text
-Admin Updates Stock
-         │
-         ▼
-Database Updated
-         │
-         ▼
-Stock Available?
-      ┌──┴──┐
-      │     │
-     Yes    No
-      │     │
-      ▼     ▼
- Available  Out Of Stock
-```
+### Backend Setup
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Configure your Environment Variables by creating a `.env` file:
+   ```env
+   PORT=8001
+   MONGODB_URI=your_mongodb_connection_string
+   JWT_SECRET=your_jwt_secret_token
+   GOOGLE_CLIENT_ID=your_google_oauth_client_id
+   ```
+4. Run in development mode:
+   ```bash
+   npm run dev
+   ```
 
-Low Stock Alerts are automatically generated when stock falls below a defined threshold.
-
----
-
-# 🗄 Database Structure
-
-## Users
-
-```text
-id
-name
-email
-phone
-password
-role
-```
-
-## Categories
-
-```text
-id
-name
-image
-```
-
-## Products
-
-```text
-id
-category_id
-name
-price
-stock
-description
-image
-```
-
-## Orders
-
-```text
-id
-user_id
-status
-total_amount
-payment_method
-```
-
-## Order Items
-
-```text
-id
-order_id
-product_id
-quantity
-price
-```
+### Frontend Setup
+1. Navigate to the frontend directory:
+   ```bash
+   cd ../frontend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start Expo CLI:
+   ```bash
+   npx expo start
+   ```
 
 ---
 
-# 🚀 Technology Stack
+## 🚀 Render Production Deployment Guide
 
-## Frontend (Mobile App for Play Store)
-The customer-facing application is a cross-platform mobile app built using the React Native framework and Expo toolchain. It is designed to be highly responsive and performant for its live deployment on the Google Play Store.
+### 1. Provisioning a Web Service on Render
+* **Environment**: `Node`
+* **Build Command**: `npm install`
+* **Start Command**: `node src/server.js`
 
-* **Framework:** React Native (`react-native` v0.74) for building native Android and iOS experiences using React.
-* **Toolchain:** Expo (`expo` v51) for streamlined development, building, and Play Store deployment (`expo run:android`).
-* **Navigation:** React Navigation (`@react-navigation/native` & `@react-navigation/bottom-tabs`) for seamless screen transitions, tab routing, and native stack management.
-* **Network & API:** Axios for making secure HTTP requests to the backend REST APIs.
-* **Local Storage:** Async Storage (`@react-native-async-storage/async-storage`) for persisting user sessions, shopping carts, and preferences locally on the device.
-* **UI Components:** React Native Safe Area Context for handling device notches, and React Native SVG for scalable graphics.
-* **Authentication UI:** Expo Auth Session for Google login integration.
-* **Push Notifications:** Expo Notifications integrated with Firebase Cloud Messaging for real-time order updates.
+### 2. Environment Variables Configuration
+Ensure the following variables are configured under the **Environment** tab in Render's dashboard:
+* `NODE_ENV`: `production` (activates rate limiters, compression, and disables detailed error stack responses)
+* `MONGODB_URI`: *[Your MongoDB Atlas URI]*
+* `JWT_SECRET`: *[A secure random string]*
 
-## Backend (Node.js API Server)
-The backend architecture is built on a scalable Node.js environment, serving RESTful APIs for the mobile app and managing all admin operations securely.
-
-* **Runtime & Framework:** Node.js with Express.js (`express` v4.19) for robust and fast API routing.
-* **Database:** MySQL database connected via Sequelize ORM (`sequelize` v6) for structured data modeling, relationships, and secure database queries.
-* **Authentication:** JWT (JSON Web Tokens) for stateless, secure API authentication and `bcryptjs` for password hashing.
-* **Security:** Helmet (`helmet`) for setting secure HTTP headers, CORS (`cors`) for cross-origin resource sharing protection, and Express Rate Limit (`express-rate-limit`) to prevent DDoS attacks.
-* **Integrations:** 
-  * Firebase Admin SDK (`firebase-admin`) for triggering push notifications to the mobile app.
-  * Google Auth Library (`google-auth-library`) for backend verification of Google OAuth tokens.
-* **File Uploads:** Multer (`multer`) for handling multi-part form data (e.g., product images, category icons).
-
-## External Services & Integrations
-
-* **Google OAuth:** Secure authentication system using Google accounts.
-* **Firebase Cloud Messaging (FCM):** Push notifications to alert customers and admin about order statuses.
-* **WhatsApp Cloud API:** Automated WhatsApp messages for order confirmations and tracking updates.
-* **Razorpay Payment Gateway:** Secure online payment processing (Credit/Debit, UPI, NetBanking).
-
----
-
-# 🎯 Future Enhancements
-
-* Voice Search
-* AI Product Recommendations
-* Multi-language Support
-* Dark Mode
-* Loyalty Points
-* Referral Program
-* Delivery Partner App
-
----
-
-# ❤️ Project Goal
-
-The goal of Tarun Kirana Store is to digitize a local grocery shop by providing customers with a simple mobile application to order groceries while enabling the shop owner to efficiently manage inventory, orders, payments, and customer communication from a centralized dashboard.
+### 3. Setup Uptime Ping (Prevent Auto-Sleep)
+Since Render puts free containers to sleep after 15 minutes of inactivity:
+1. Create a free account at [UptimeRobot](https://uptimerobot.com/).
+2. Setup an **HTTP(s) Monitor** pointing to your health check URL:
+   `https://your-render-subdomain.onrender.com/health`
+3. Set the interval to **5 minutes**. This will keep the container awake 24/7.

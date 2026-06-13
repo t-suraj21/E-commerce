@@ -27,7 +27,7 @@ const getValidType = (data = {}) => {
 const sendNotificationToUser = async (userId, title, body, data = {}) => {
   try {
     // 1. Save to database completely
-    await Notification.create({
+    const notification = await Notification.create({
       userId,
       title,
       body,
@@ -47,7 +47,8 @@ const sendNotificationToUser = async (userId, title, body, data = {}) => {
       return false;
     }
 
-    return await sendExpoPushNotification(pushToken, title, body, data);
+    const pushData = { ...data, notificationId: notification._id.toString() };
+    return await sendExpoPushNotification(pushToken, title, body, pushData);
   } catch (error) {
     console.error(`Error sending notification to user ${userId}:`, error.message);
     return false;
@@ -74,20 +75,22 @@ const sendNotificationToRole = async (role, title, body, data = {}) => {
       data,
       type: getValidType(data)
     }));
-    await Notification.insertMany(notificationsToCreate);
+    const createdNotifications = await Notification.insertMany(notificationsToCreate);
 
     const messages = [];
-    for (let user of users) {
+    users.forEach((user, index) => {
       if (user.pushToken && (user.pushToken.startsWith('ExponentPushToken') || user.pushToken.startsWith('ExpoPushToken'))) {
+        const createdNotif = createdNotifications[index];
+        const pushData = { ...data, notificationId: createdNotif ? createdNotif._id.toString() : undefined };
         messages.push({
           to: user.pushToken,
           sound: 'default',
           title: title,
           body: body,
-          data: data,
+          data: pushData,
         });
       }
-    }
+    });
 
     if (messages.length > 0) {
       await sendExpoPushMessagesInChunks(messages);
@@ -117,21 +120,22 @@ const sendBroadcastNotification = async (title, body, data = {}) => {
       data,
       type: getValidType(data)
     }));
-    await Notification.insertMany(notificationsToCreate);
+    const createdNotifications = await Notification.insertMany(notificationsToCreate);
 
     const messages = [];
-    
-    for (let user of users) {
+    users.forEach((user, index) => {
       if (user.pushToken && (user.pushToken.startsWith('ExponentPushToken') || user.pushToken.startsWith('ExpoPushToken'))) {
+        const createdNotif = createdNotifications[index];
+        const pushData = { ...data, notificationId: createdNotif ? createdNotif._id.toString() : undefined };
         messages.push({
           to: user.pushToken,
           sound: 'default',
           title: title,
           body: body,
-          data: data,
+          data: pushData,
         });
       }
-    }
+    });
 
     if (messages.length > 0) {
       await sendExpoPushMessagesInChunks(messages);
