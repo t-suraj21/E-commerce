@@ -28,6 +28,7 @@ export default function LoginScreen({ navigation }) {
     GoogleSignin.configure({
       webClientId: '1079591731539-1adt18ka2qqjbktoe81je05r835ds480.apps.googleusercontent.com',
       iosClientId: '1079591731539-33k2hf1nc8357p3vpoopb53b9kcc0e9f.apps.googleusercontent.com',
+      androidClientId: '1079591731539-ba7ka2bfme8jbp49ioomrmum4lhpm6hs.apps.googleusercontent.com',
       offlineAccess: true,
     });
   }, []);
@@ -52,7 +53,7 @@ export default function LoginScreen({ navigation }) {
     try {
       setErrorMessage('');
       await GoogleSignin.hasPlayServices();
-      
+
       // Clear previous sign-in state to force account selection prompt
       try {
         await GoogleSignin.signOut();
@@ -65,7 +66,7 @@ export default function LoginScreen({ navigation }) {
       if (!idToken) {
         throw new Error('No ID token received from Google');
       }
-      
+
       const result = await googleLogin(idToken);
       if (!result.success) {
         setErrorMessage(result.message);
@@ -181,7 +182,7 @@ export default function LoginScreen({ navigation }) {
             <Ionicons name="logo-google" size={20} color="#DB4437" style={styles.googleIcon} />
             <Text style={styles.googleButtonText}>Sign in with Google</Text>
           </TouchableOpacity>
-         </View>
+        </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
