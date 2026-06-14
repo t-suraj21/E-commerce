@@ -12,6 +12,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "splash": {
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#2E7D32"
     },
@@ -53,11 +54,11 @@
         }
       ]
     ],
+    "owner": "t_suraj21",
     "extra": {
       "eas": {
-        "projectId": "7a79cb24-9911-42fc-b7ab-ede0e02e9578"
+        "projectId": "48dbd3d0-ea45-40b9-952b-c5b38e4319b0"
       }
-    },
-    "owner": "t_suraj21"
+    }
   }
 }

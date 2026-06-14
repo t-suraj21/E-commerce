@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
 import { AuthContext } from '../../context/AuthContext';
 import { COLORS, SPACING, SIZES, SHADOWS } from '../../styles/theme';
@@ -77,6 +78,11 @@ export default function RegisterScreen({ navigation }) {
         console.log('Google Sign-In In Progress');
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         setErrorMessage('Google Play Services not available or outdated');
+      } else if (error.code === statusCodes.DEVELOPER_ERROR) {
+        const errorMsg = 'Google Sign-In Developer Error (10): The signing key SHA-1 fingerprint of this APK is not registered in the Firebase Console. Please add your APK\'s SHA-1 fingerprint to your Firebase project settings.';
+        setErrorMessage(errorMsg);
+        Alert.alert('Google Sign-In Error', errorMsg);
+        console.error(errorMsg, error);
       } else {
         setErrorMessage(error.message || 'Google Sign-In failed');
       }

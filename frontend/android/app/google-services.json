@@ -12,16 +12,7 @@
           "package_name": "com.tarunkiranastore.app"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "1079591731539-ba7ka2bfme8jbp49ioomrmum4lhpm6hs.apps.googleusercontent.com",
-          "client_type": 1
-        },
-        {
-          "client_id": "1079591731539-1adt18ka2qqjbktoe81je05r835ds480.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
           "current_key": "AIzaSyADktBOOgb4gzbj65qOgWZL8H6KvITX6fo"
